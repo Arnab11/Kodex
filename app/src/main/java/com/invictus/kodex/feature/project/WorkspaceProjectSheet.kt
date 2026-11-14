@@ -1,5 +1,8 @@
 package com.invictus.kodex.feature.project
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.HorizontalDivider
 import android.os.Environment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -298,12 +301,20 @@ private fun MoreButton(
                 Icon(XIcons.MoreVert, contentDescription = null, tint = tint)
             }
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuChange(false) }) {
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { onMenuChange(false) },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 3.dp,
+            shadowElevation = 6.dp,
+        ) {
             val close = { onMenuChange(false) }
             val canModify = item.exists && !item.isDeviceStorage
             if (canModify) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.recent_menu_backup)) },
+                MenuRow(
+                    label = stringResource(R.string.recent_menu_backup),
+                    icon = XIcons.CloudUpload,
                     enabled = !isBackingUp,
                     onClick = {
                         close()
@@ -311,24 +322,31 @@ private fun MoreButton(
                     },
                 )
             }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.tree_menu_copy_path)) },
+            MenuRow(
+                label = stringResource(R.string.tree_menu_copy_path),
+                icon = XIcons.ContentCopy,
                 onClick = {
                     close()
                     onCopyPath(file)
                 },
             )
             if (canModify) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.tree_menu_rename)) },
+                MenuRow(
+                    label = stringResource(R.string.tree_menu_rename),
+                    icon = XIcons.Edit,
                     onClick = {
                         close()
                         onEvent(ProjectsEvent.StartRename(file))
                     },
                 )
             }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.recent_menu_remove)) },
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+            MenuRow(
+                label = stringResource(R.string.recent_menu_remove),
+                icon = XIcons.Close,
                 onClick = {
                     close()
                     onEvent(ProjectsEvent.RemoveRecent(file.path))
@@ -336,4 +354,19 @@ private fun MoreButton(
             )
         }
     }
+}
+
+/** One compact (44dp) menu row: leading icon + label, same look as the Home recents menu. */
+@Composable
+private fun MenuRow(label: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
+    DropdownMenuItem(
+        text = { Text(label, style = MaterialTheme.typography.bodyMedium) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        },
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 14.dp),
+        modifier = Modifier.height(44.dp),
+    )
 }

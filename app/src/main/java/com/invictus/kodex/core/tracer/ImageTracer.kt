@@ -18,7 +18,8 @@ object ImageTracer {
 
     const val QUALITY_MIN = 1
     const val QUALITY_MAX = 5
-    const val DEFAULT_QUALITY = 3
+    /** 4 = "High". */
+    const val DEFAULT_QUALITY = 4
 
     /** Palette caps along the Colors slider; 0 = all colors (the last stop). */
     val COLOR_STEPS = intArrayOf(2, 4, 8, 16, 32, 64, 128, 0)

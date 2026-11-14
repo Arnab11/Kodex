@@ -1,5 +1,9 @@
 package com.invictus.kodex.feature.tools
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -275,6 +279,8 @@ private fun SliderRow(
             Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Text(valueText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
+        // Slim track, small round thumb, no tick marks or end dots: the value is already spelled out above.
+        val interaction = remember { MutableInteractionSource() }
         Slider(
             value = value,
             onValueChange = onChange,
@@ -282,7 +288,25 @@ private fun SliderRow(
             valueRange = range,
             steps = steps,
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
+            interactionSource = interaction,
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = interaction,
+                    enabled = enabled,
+                    thumbSize = DpSize(20.dp, 20.dp),
+                )
+            },
+            track = { state ->
+                SliderDefaults.Track(
+                    sliderState = state,
+                    enabled = enabled,
+                    modifier = Modifier.height(6.dp),
+                    drawStopIndicator = null,
+                    drawTick = { _, _ -> },
+                    thumbTrackGapSize = 0.dp,
+                )
+            },
+            modifier = Modifier.fillMaxWidth().height(32.dp),
         )
     }
 }

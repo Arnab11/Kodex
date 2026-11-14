@@ -1,5 +1,9 @@
 package com.invictus.kodex.github.install
 
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import android.os.Process
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -33,13 +37,23 @@ object InstallEvents {
     private val _results = MutableSharedFlow<InstallResult>(extraBufferCapacity = 4)
     val results: SharedFlow<InstallResult> = _results.asSharedFlow()
     internal fun emit(r: InstallResult) { _results.tryEmit(r) }
+
+    /** Sessions that asked Android to skip its dialog, with the APK so the install can be repeated with the dialog. */
+    internal val silentSessions = ConcurrentHashMap<Int, File>()
+
+    /** Sessions for which Android did put up its confirmation (so an abort is the person saying no). */
+    internal val dialogShown: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /** Set once the platform turned down a silent session (some OEM builds do): later installs ask up front. */
+    @Volatile internal var silentRefused = false
 }
 
 /**
- * Installs through the PackageInstaller session API (update-in-place, status callbacks). Never
- * installs on its own: [install] is only called after the user taps Install, and the system
- * always shows its own confirmation. Falls back to ACTION_VIEW + FileProvider if a session
- * cannot be created.
+ * Installs through the PackageInstaller session API (update-in-place, status callbacks), the way Morphe Manager
+ * does: [install] is only called after the user taps Install. An update of an app this app installed (Android 12+,
+ * this app being its installer / update owner) is applied without the system dialog; the first install, and any
+ * update Android will not take silently, shows the system confirmation as usual. Falls back to ACTION_VIEW +
+ * FileProvider if a session cannot be created.
  */
 class ApkInstaller(private val context: Context) {
 
@@ -52,7 +66,9 @@ class ApkInstaller(private val context: Context) {
 
     suspend fun install(apk: File) = withContext(Dispatchers.IO) {
         try {
-            installWithSession(apk)
+            val packageName = context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName
+            val silent = !InstallEvents.silentRefused && packageName != null && canUpdateSilently(packageName)
+            installWithSession(apk, requireUserAction = !silent)
         } catch (e: IOException) {
             installWithIntent(apk)
         } catch (e: SecurityException) {
@@ -60,23 +76,48 @@ class ApkInstaller(private val context: Context) {
         }
     }
 
+    /**
+     * Whether Android would update [packageName] without its dialog: Android 12+, the installed app targets
+     * Android 12+, and this app is its update owner (Android 14+) or else its installer.
+     */
+    private fun canUpdateSilently(packageName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val pm = context.packageManager
+        val installed = runCatching { pm.getPackageInfo(packageName, 0) }.getOrNull() ?: return false
+        if ((installed.applicationInfo?.targetSdkVersion ?: 0) < Build.VERSION_CODES.S) return false
+        val source = runCatching { pm.getInstallSourceInfo(packageName) }.getOrNull() ?: return false
+        val owner = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) source.updateOwnerPackageName else null
+        // An update owner, once claimed, outranks whoever installed the app.
+        return owner?.let { it == context.packageName } ?: (source.installingPackageName == context.packageName)
+    }
+
     @Suppress("DEPRECATION")
-    private fun installWithSession(apk: File) {
+    private fun installWithSession(apk: File, requireUserAction: Boolean) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setSize(apk.length())
         // A user-initiated install of a known package.
         params.setInstallReason(PackageManager.INSTALL_REASON_USER)
+        params.setOriginatingUid(Process.myUid())
         context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName?.let { params.setAppPackageName(it) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_OTHER)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Claim the updates of what this app installs, so they can stay dialog-free.
+            params.setRequestUpdateOwnership(true)
         }
-        // The system always asks the user to confirm. Asking for "no user action" (USER_ACTION_NOT_REQUIRED) is
-        // what Play Protect reads as "can install apps without your permission", so it is deliberately not set.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+            params.setRequireUserAction(
+                if (requireUserAction) {
+                    PackageInstaller.SessionParams.USER_ACTION_REQUIRED
+                } else {
+                    PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
+                },
+            )
         }
         val id = installer.createSession(params)
+        if (!requireUserAction) InstallEvents.silentSessions[id] = apk
         var session: PackageInstaller.Session? = null
         try {
             val s = installer.openSession(id)
@@ -94,6 +135,7 @@ class ApkInstaller(private val context: Context) {
             )
             s.commit(pi.intentSender)
         } catch (e: Exception) {
+            InstallEvents.silentSessions.remove(id)
             runCatching { session?.abandon() }
             if (session == null) runCatching { installer.abandonSession(id) }
             throw if (e is IOException || e is SecurityException) e else IOException(e)
@@ -114,7 +156,30 @@ class ApkInstaller(private val context: Context) {
 /** Receives the PackageInstaller status; launches the system confirmation when asked to. */
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            InstallEvents.dialogShown.add(sessionId)
+        } else {
+            val silentApk = InstallEvents.silentSessions.remove(sessionId)
+            val asked = InstallEvents.dialogShown.remove(sessionId)
+            if (status == PackageInstaller.STATUS_FAILURE_ABORTED && silentApk != null && !asked) {
+                // Android turned the silent update down without asking anyone: do it again with its dialog.
+                InstallEvents.silentRefused = true
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        ApkInstaller(context.applicationContext).install(silentApk)
+                    } catch (e: Exception) {
+                        InstallEvents.emit(InstallResult.Failed(e.message))
+                    } finally {
+                        pending.finish()
+                    }
+                }
+                return
+            }
+        }
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 val confirm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)

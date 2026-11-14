@@ -263,6 +263,7 @@ private fun DownloadButton(label: Int, enabled: Boolean, onClick: () -> Unit, mo
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SliderRow(
     label: String,

@@ -521,6 +521,14 @@
     <string name="git_reflog_kind_author">Author</string>
     <string name="git_reflog_kind_branch">Branch</string>
     <string name="git_reflog_kind_other">Other</string>
+    <string name="git_reflog_kind_start">Start</string>
+    <string name="git_reflog_explain_start">This is the first record in Git\'s log for this branch pointer. It appears when a repository is created or cloned, or when the log was cleared or moved. Nothing was changed in your files or commits here.</string>
+    <string name="git_reflog_t_start">History starts here</string>
+    <string name="git_reflog_points_to">Now at %1$s: %2$s</string>
+    <string name="git_reflog_raw">Git noted: %1$s</string>
+    <string name="git_reflog_hide_commits">Hide commits</string>
+    <string name="git_reflog_show_commits">Show commits</string>
+    <string name="git_reflog_intro_hidden">Commits are hidden, so only moves like reset, switch, merge and pull show. Tap the eye to bring them back.</string>
 
     <string name="git_reflog_explain_commit">A commit was saved and the branch moved forward to it.</string>
     <string name="git_reflog_explain_switch">You switched to another branch (or commit). Your files changed to match it.</string>

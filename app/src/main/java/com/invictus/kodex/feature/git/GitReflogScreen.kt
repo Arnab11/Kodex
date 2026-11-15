@@ -1,5 +1,8 @@
 package com.invictus.kodex.feature.git
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
@@ -99,6 +102,7 @@ internal enum class ReflogKind(@StringRes val label: Int, @StringRes val explain
     PICK(R.string.git_reflog_kind_pick, R.string.git_reflog_explain_pick),
     REVERT(R.string.git_reflog_kind_revert, R.string.git_reflog_explain_revert),
     CLONE(R.string.git_reflog_kind_clone, R.string.git_reflog_explain_clone),
+    START(R.string.git_reflog_kind_start, R.string.git_reflog_explain_start),
     AUTHOR(R.string.git_reflog_kind_author, R.string.git_reflog_explain_author),
     BRANCH(R.string.git_reflog_kind_branch, R.string.git_reflog_explain_branch),
     OTHER(R.string.git_reflog_kind_other, R.string.git_reflog_explain_other),
@@ -113,10 +117,13 @@ internal class ReflogText(
 )
 
 /** Git writes lines like "commit (amend): msg" or "checkout: moving from a to b"; turn them into words. */
-internal fun describeReflog(raw: String): ReflogText {
+internal fun describeReflog(raw: String, fromNothing: Boolean = false, subject: String? = null): ReflogText {
     val msg = raw.trim()
+    // No previous position and nothing Git recognises: the first record of this log (repository created / cloned / log reset).
+    val unknownStart = fromNothing && !(msg.startsWith("commit") || msg.startsWith("clone") || msg.startsWith("branch") || msg.startsWith("checkout"))
+    if (unknownStart) return ReflogText(ReflogKind.START, R.string.git_reflog_t_start, detail = subject)
     // "<hash>: updating HEAD" is git moving HEAD itself (e.g. around a reset): nothing the person did.
-    if (msg.endsWith("updating HEAD")) return ReflogText(ReflogKind.OTHER, R.string.git_reflog_t_head_updated)
+    if (msg.endsWith("updating HEAD")) return ReflogText(ReflogKind.OTHER, R.string.git_reflog_t_head_updated, detail = subject)
     val colon = msg.indexOf(':')
     val head = if (colon >= 0) msg.substring(0, colon).trim() else msg
     val rest = if (colon >= 0) msg.substring(colon + 1).trim().ifBlank { null } else null
@@ -155,7 +162,7 @@ internal fun describeReflog(raw: String): ReflogText {
         head.startsWith("clone") -> ReflogText(ReflogKind.CLONE, R.string.git_reflog_t_clone, detail = rest)
         head == "rewrite" -> ReflogText(ReflogKind.AUTHOR, R.string.git_reflog_t_author, detail = rest)
         head.startsWith("branch") -> ReflogText(ReflogKind.BRANCH, R.string.git_reflog_t_branch, detail = rest)
-        else -> ReflogText(ReflogKind.OTHER, R.string.git_reflog_t_other, detail = msg.ifBlank { null })
+        else -> ReflogText(ReflogKind.OTHER, R.string.git_reflog_t_other, detail = msg.ifBlank { null } ?: subject)
     }
 }
 
@@ -256,10 +263,11 @@ private sealed interface ReflogRow {
     data class Item(val entry: GitReflogEntry, val isCurrent: Boolean, val index: Int) : ReflogRow
 }
 
-private fun buildReflogRows(entries: List<GitReflogEntry>): List<ReflogRow> = buildList {
+private fun buildReflogRows(entries: List<GitReflogEntry>, hideCommits: Boolean): List<ReflogRow> = buildList {
     add(ReflogRow.Intro)
     var lastDay: LocalDate? = null
     entries.forEachIndexed { i, e ->
+        if (hideCommits && describeReflog(e.message, e.fromNothing).kind == ReflogKind.COMMIT) return@forEachIndexed
         val day = Instant.ofEpochMilli(e.timeMs).atZone(ZoneId.systemDefault()).toLocalDate()
         if (day != lastDay) {
             add(ReflogRow.Day(day, e.timeMs, pos = i))
@@ -285,7 +293,9 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
-    val rows = remember(ui.entries) { buildReflogRows(ui.entries) }
+    // Top-bar eye: hide the plain commits so the moves that rewrote history (reset, switch, merge, pull...) stand out.
+    var hideCommits by rememberSaveable { mutableStateOf(false) }
+    val rows = remember(ui.entries, hideCommits) { buildReflogRows(ui.entries, hideCommits) }
     val copiedMsg = stringResource(R.string.git_history_hash_copied)
 
     LaunchedEffect(Unit) {
@@ -302,6 +312,13 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { hideCommits = !hideCommits }) {
+                        Icon(
+                            if (hideCommits) XIcons.VisibilityOff else XIcons.Visibility,
+                            contentDescription = stringResource(if (hideCommits) R.string.git_reflog_show_commits else R.string.git_reflog_hide_commits),
+                            tint = if (hideCommits) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = vm::reload) {
                         Icon(XIcons.Sync, contentDescription = stringResource(R.string.git_reflog_refresh))
                     }
@@ -326,7 +343,7 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
                         },
                     ) { row ->
                         when (row) {
-                            ReflogRow.Intro -> ReflogIntro()
+                            ReflogRow.Intro -> ReflogIntro(hideCommits)
                             is ReflogRow.Day -> Text(
                                 dayLabel(context, row.ms),
                                 style = MaterialTheme.typography.titleSmall,
@@ -386,7 +403,7 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ReflogIntro() {
+private fun ReflogIntro(commitsHidden: Boolean) {
     val cs = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -397,7 +414,7 @@ private fun ReflogIntro() {
             Icon(XIcons.Info, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Text(
-                stringResource(R.string.git_reflog_intro_tip),
+                stringResource(if (commitsHidden) R.string.git_reflog_intro_hidden else R.string.git_reflog_intro_tip),
                 style = MaterialTheme.typography.bodyMedium,
                 color = cs.onSurfaceVariant,
             )
@@ -414,7 +431,7 @@ private fun kindColor(kind: ReflogKind): Color {
         ReflogKind.SWITCH, ReflogKind.REBASE, ReflogKind.AUTHOR, ReflogKind.BRANCH -> cs.tertiary
         ReflogKind.MERGE, ReflogKind.PICK, ReflogKind.CLONE -> cs.secondary
         ReflogKind.RESET, ReflogKind.REVERT -> cs.error
-        ReflogKind.OTHER -> cs.onSurfaceVariant
+        ReflogKind.OTHER, ReflogKind.START -> cs.onSurfaceVariant
     }
 }
 
@@ -429,7 +446,7 @@ private fun kindIcon(kind: ReflogKind): ImageVector = when (kind) {
     ReflogKind.REVERT -> XIcons.Restore
     ReflogKind.CLONE -> XIcons.Clone
     ReflogKind.AUTHOR -> XIcons.Person
-    ReflogKind.OTHER -> XIcons.Info
+    ReflogKind.OTHER, ReflogKind.START -> XIcons.Info
 }
 
 /**
@@ -441,7 +458,7 @@ private fun kindIcon(kind: ReflogKind): ImageVector = when (kind) {
 private fun ReflogItem(entry: GitReflogEntry, isCurrent: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
     val cs = MaterialTheme.colorScheme
-    val text = remember(entry.message) { describeReflog(entry.message) }
+    val text = remember(entry.message, entry.fromNothing, entry.subject) { describeReflog(entry.message, entry.fromNothing, entry.subject) }
     val accent = kindColor(text.kind)
     Surface(
         onClick = onClick,
@@ -525,7 +542,7 @@ private fun lineOf(t: ReflogText): String {
         detail == null -> title
         t.title == R.string.git_reflog_t_commit || t.title == R.string.git_reflog_t_first_commit ||
             t.title == R.string.git_reflog_t_merge_commit -> detail
-        t.kind == ReflogKind.OTHER -> detail
+        t.title == R.string.git_reflog_t_other -> detail
         else -> "$title: $detail"
     }
 }
@@ -540,7 +557,7 @@ private fun ReflogDetailSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val text = remember(entry.message) { describeReflog(entry.message) }
+    val text = remember(entry.message, entry.fromNothing, entry.subject) { describeReflog(entry.message, entry.fromNothing, entry.subject) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
@@ -553,6 +570,16 @@ private fun ReflogDetailSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            entry.subject?.let {
+                Text(stringResource(R.string.git_reflog_points_to, entry.shortNew, it), style = MaterialTheme.typography.bodyMedium)
+            }
+            if ((text.kind == ReflogKind.OTHER || text.kind == ReflogKind.START) && entry.message.isNotBlank()) {
+                Text(
+                    stringResource(R.string.git_reflog_raw, entry.message.trim()),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 stringResource(R.string.git_reflog_when, fullTime(context, entry.timeMs)),
                 style = MaterialTheme.typography.bodySmall,

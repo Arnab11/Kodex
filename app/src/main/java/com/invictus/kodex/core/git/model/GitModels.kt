@@ -114,6 +114,8 @@ data class GitReflogEntry(
     val timeMs: Long,
     /** True when this move created the very first position of HEAD (no previous commit). */
     val fromNothing: Boolean,
+    /** First line of the commit HEAD moved to (what that point actually is); null if it cannot be read. */
+    val subject: String? = null,
 )
 
 /** How a file changed inside one commit (commit-detail file list). */

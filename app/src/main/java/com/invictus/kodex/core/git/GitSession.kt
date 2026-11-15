@@ -921,8 +921,10 @@ class GitSession(
     /** HEAD's reflog, newest first: every place HEAD has been (commits, switches, resets, merges...). */
     suspend fun reflog(max: Int = 300): GitResult<List<GitReflogEntry>> = ioOp(TITLE_LOG) {
         readOnly {
+            val walk = RevWalk(repository)
             git.reflog().setRef(Constants.HEAD).call().take(max).map { e ->
                 GitReflogEntry(
+                    subject = runCatching { walk.parseCommit(e.newId).shortMessage }.getOrNull()?.ifBlank { null },
                     newId = e.newId.name,
                     shortNew = e.newId.abbreviate(7).name(),
                     shortOld = e.oldId.abbreviate(7).name(),
@@ -931,7 +933,7 @@ class GitSession(
                     timeMs = e.who?.`when`?.time ?: 0L,
                     fromNothing = e.oldId == ObjectId.zeroId(),
                 )
-            }
+            }.also { walk.close() }
         }
     }
 

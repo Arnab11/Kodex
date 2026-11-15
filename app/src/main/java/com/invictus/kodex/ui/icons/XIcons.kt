@@ -295,6 +295,16 @@ object XIcons {
         )
     }
 
+    /** Workspace menu "Terminal" (Material Symbols "terminal" look: rounded box, prompt chevron, cursor bar). */
+    val Terminal: ImageVector by lazy {
+        icon(
+            "Terminal",
+            "M4,4h16a2,2 0 0 1 2,2v12a2,2 0 0 1 -2,2H4a2,2 0 0 1 -2,-2V6a2,2 0 0 1 2,-2z" +
+                "M6,9.4L8.6,12 6,14.6 7.4,16 11.4,12 7.4,8z" +
+                "M12.5,15v1.5h5.5v-1.5z",
+        )
+    }
+
     /** M5 preview toggle, "Preview" state. */
     val Visibility: ImageVector by lazy {
         icon(

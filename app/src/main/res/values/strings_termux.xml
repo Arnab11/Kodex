@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_terminal">Terminal</string>
+    <string name="termux_opening_hint">Opening Termux in this project…</string>
+    <string name="termux_setup_help">Setup help</string>
+    <string name="termux_missing_title">Termux not installed</string>
+    <string name="termux_missing_body">The terminal runs in Termux, a separate app with git, ssh, python, node and more. Install it from F-Droid or GitHub (the Play Store version is outdated), then tap Terminal again.</string>
+    <string name="termux_get">Get Termux</string>
+    <string name="termux_setup_title">Set up Termux</string>
+    <string name="termux_setup_steps">One-time setup:\n\n1. Allow \"Run commands in Termux environment\" for Kodex (App info → Permissions) if you denied it.\n2. Paste this command in Termux and press Enter (the button copies it and opens Termux).\n3. In Android settings, allow Termux \"Display over other apps\".\n\nThen tap Terminal again.</string>
+    <string name="termux_copy_and_open">Copy &amp; open Termux</string>
+</resources>

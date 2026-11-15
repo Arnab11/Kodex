@@ -1181,6 +1181,11 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
 
+        <!-- Result of "Run command" in Termux (delivered through a PendingIntent we hand to Termux). -->
+        <receiver
+            android:name=".core.external.TermuxResultReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".github.install.InstallResultReceiver"
             android:exported="false" />

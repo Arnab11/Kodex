@@ -65,6 +65,7 @@ fun SettingsRootScreen(
     aiEnabled: Boolean = true,
     viewModel: EditorViewModel? = null,
     modifier: Modifier = Modifier,
+    onOpenTermuxSetup: () -> Unit = {},
 ) {
     val isTablet = isTabletLayout()
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.Appearance) }
@@ -238,6 +239,7 @@ fun SettingsRootScreen(
                                     SettingsCategory.Behavior -> SettingsBehaviorScreen(
                                         viewModel = effectiveEditorVm,
                                         onBack = onBack,
+                                        onOpenTermuxSetup = onOpenTermuxSetup,
                                     )
                                     SettingsCategory.GitHub -> SettingsGitHubScreen(
                                         onBack = onBack,

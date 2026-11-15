@@ -713,6 +713,13 @@ class EditorViewModel(
         setExternalChangeUi(path, ExternalChange.None)
     }
 
+    /** Saves the active tab if it has unsaved edits, so "Run file" sees the latest text. False if the write failed. */
+    suspend fun saveActiveIfDirty(): Boolean {
+        val path = _uiState.value.activePath ?: return false
+        val buffer = buffers[path] ?: return false
+        return if (buffer.isDirty) saveBuffers(listOf(path)) else true
+    }
+
     private fun save(paths: List<String>) {
         if (paths.isEmpty()) return
         viewModelScope.launch { saveBuffers(paths) }

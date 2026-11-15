@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.invictus.kodex.core.external.ExternalFileResolver
+import com.invictus.kodex.core.external.ExternalProjectOpen
 import com.invictus.kodex.github.notify.GhNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
 
         if (savedInstanceState == null) {
             handleOpenIntent(intent)
+            handleOpenDirIntent(intent)
             handleGitHubIntent(intent)
         }
 
@@ -113,7 +115,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleOpenIntent(intent)
+        handleOpenDirIntent(intent)
         handleGitHubIntent(intent)
+    }
+
+    /** `kodex <folder>` from Termux: open that folder as the project. */
+    private fun handleOpenDirIntent(intent: Intent?) {
+        val open = intent ?: return
+        if (open.action != ExternalProjectOpen.ACTION) return
+        val path = open.getStringExtra(ExternalProjectOpen.EXTRA_PATH) ?: return
+        open.removeExtra(ExternalProjectOpen.EXTRA_PATH)
+        val dir = File(path)
+        if (dir.isDirectory) ExternalProjectOpen.request(dir)
     }
 
     private fun handleGitHubIntent(intent: Intent?) {

@@ -101,6 +101,7 @@ fun EditorScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     navigationIcon: (@Composable () -> Unit)? = null,
+    onOpenTermuxSetup: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -114,6 +115,18 @@ fun EditorScreen(
     val magnifierEnabled by viewModel.magnifierEnabled.collectAsStateWithLifecycle()
     val pairCursorEnabled by viewModel.pairCursorEnabled.collectAsStateWithLifecycle()
     var showSymbolCustomize by remember { mutableStateOf(false) }
+    // "Run file": saves, then runs the active file in a visible Termux session (same folder).
+    val termuxProblem: () -> Unit = {
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(R.string.termux_not_ready),
+                actionLabel = context.getString(R.string.termux_setup_action),
+            )
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenTermuxSetup()
+        }
+    }
+    val termuxGate = com.invictus.kodex.feature.termux.rememberTermuxGate(termuxProblem)
+    val terminalEnabled = com.invictus.kodex.core.external.TermuxSetupPrefs.enabled(context).value
     var showFind by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
     // M17: AI panel in a bottom split; gate is null in the normal flavor.
@@ -217,6 +230,25 @@ fun EditorScreen(
                         icon = XIcons.Redo,
                         description = stringResource(R.string.action_redo),
                     )
+                    val runFile = state.activePath?.takeIf { terminalEnabled }?.let(::File)
+                        ?.takeIf { com.invictus.kodex.core.external.TermuxRunFile.isRunnable(it) }
+                    if (runFile != null) {
+                        IconButton(
+                            onClick = {
+                                termuxGate {
+                                    scope.launch {
+                                        if (viewModel.saveActiveIfDirty() &&
+                                            !com.invictus.kodex.core.external.TermuxLauncher.runFile(context, runFile)
+                                        ) {
+                                            termuxProblem()
+                                        }
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(XIcons.PlayArrow, contentDescription = stringResource(R.string.termux_run_file))
+                        }
+                    }
                     if (active?.previewType?.isTextPreview == true) {
                         IconButton(onClick = { viewModel.onEvent(EditorEvent.CyclePreviewMode(active.path)) }) {
                             val (icon, description) = when (active.previewMode) {

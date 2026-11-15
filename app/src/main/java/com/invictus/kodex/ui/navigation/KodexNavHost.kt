@@ -180,8 +180,12 @@ fun KodexNavHost(
                 },
                 onOpenGitHub = { root -> navController.navigate(Routes.github(root.path)) },
                 onOpenAi = AiGate?.let { g -> { root: java.io.File -> navController.navigate(g.agentRouteFor(root.path)) } },
+                onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
+        }
+        composable(Routes.TERMUX_SETUP) {
+            com.invictus.kodex.feature.termux.TermuxSetupScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.EDITOR) {
             EditorScreen(
@@ -192,6 +196,7 @@ fun KodexNavHost(
                     }
                 },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )
         }
         composable(Routes.SETTINGS) {
@@ -206,6 +211,7 @@ fun KodexNavHost(
                 onOpenAi = com.invictus.kodex.ai.AiFlavor.gate?.let { g -> { navController.navigate(g.settingsRoute) } },
                 aiEnabled = com.invictus.kodex.ai.AiSwitch.enabled,
                 onOpenAbout = { navController.navigate(Routes.SETTINGS_ABOUT) },
+                onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )
         }
         composable(Routes.SETTINGS_ABOUT) {
@@ -276,6 +282,7 @@ fun KodexNavHost(
             SettingsBehaviorScreen(
                 viewModel = editorViewModel,
                 onBack = { navController.popBackStack() },
+                onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )
         }
         composable(Routes.MEDIA_PREVIEW) {
@@ -489,6 +496,15 @@ fun KodexNavHost(
         externalScope.launch {
             kotlinx.coroutines.delay(8_000)
             externalNavPending = false
+        }
+    }
+
+    // `kodex <folder>` from Termux: bring the workspace forward; it opens the folder itself.
+    val pendingProjectDir by com.invictus.kodex.core.external.ExternalProjectOpen.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingProjectDir, storageGranted, onboardingCompleted) {
+        if (pendingProjectDir == null || !storageGranted || !onboardingCompleted) return@LaunchedEffect
+        if (navController.currentBackStackEntry?.destination?.route != Routes.WORKSPACE) {
+            navController.navigate(Routes.WORKSPACE) { launchSingleTop = true }
         }
     }
 

@@ -6,7 +6,9 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.invictus.kodex.core.external.ExternalProjectOpen
 import com.invictus.kodex.core.external.TermuxLauncher
+import com.invictus.kodex.core.external.TermuxSetupPrefs
 import com.invictus.kodex.ui.components.expressiveClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
@@ -109,6 +111,7 @@ fun WorkspaceScreen(
     onOpenCodeSearch: (File) -> Unit = {},
     onOpenGitHub: (File) -> Unit = {},
     onOpenAi: ((File) -> Unit)? = null,
+    onOpenTermuxSetup: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -215,7 +218,17 @@ fun WorkspaceScreen(
     }
 
     // Workspace 3-dot menu "Terminal": hands the project folder to Termux (no terminal bundled in the APK).
-    var termuxIssue by remember { mutableStateOf<TermuxIssue?>(null) }
+    // Never forces the setup screen: a problem shows a snackbar with a "Setup" action instead.
+    val termuxProblem: () -> Unit = {
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(R.string.termux_not_ready),
+                actionLabel = context.getString(R.string.termux_setup_action),
+                duration = androidx.compose.material3.SnackbarDuration.Long,
+            )
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenTermuxSetup()
+        }
+    }
     val openTermux: () -> Unit = {
         if (TermuxLauncher.openSession(context, state.root)) {
             scope.launch {
@@ -224,28 +237,47 @@ fun WorkspaceScreen(
                     actionLabel = context.getString(R.string.termux_setup_help),
                     duration = androidx.compose.material3.SnackbarDuration.Short,
                 )
-                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                    termuxIssue = TermuxIssue.NeedsSetup
-                }
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenTermuxSetup()
             }
         } else {
-            termuxIssue = TermuxIssue.NeedsSetup
+            termuxProblem()
         }
     }
+    var showRunCommand by remember { mutableStateOf(false) }
+    var afterTermuxPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
     val termuxPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) openTermux() else termuxIssue = TermuxIssue.NeedsSetup
+        val action = afterTermuxPermission
+        afterTermuxPermission = null
+        if (granted) action?.invoke() else termuxProblem()
     }
-    val onOpenTerminal: () -> Unit = {
+    /** Runs [action] once Termux is installed and Kodex may call it. */
+    val withTermux: (() -> Unit) -> Unit = { action ->
         when {
-            !TermuxLauncher.isInstalled(context) -> termuxIssue = TermuxIssue.NotInstalled
-            !TermuxLauncher.hasPermission(context) -> termuxPermission.launch(TermuxLauncher.PERMISSION)
-            else -> openTermux()
+            !TermuxLauncher.isInstalled(context) -> termuxProblem()
+            !TermuxLauncher.hasPermission(context) -> {
+                afterTermuxPermission = action
+                termuxPermission.launch(TermuxLauncher.PERMISSION)
+            }
+            else -> action()
         }
     }
-    termuxIssue?.let { issue ->
-        TermuxSetupDialog(issue = issue, onDismiss = { termuxIssue = null })
-    }
+    val onOpenTerminal: () -> Unit = { withTermux(openTermux) }
+    val onRunCommand: () -> Unit = { withTermux { showRunCommand = true } }
 
+    // `kodex <folder>` in Termux asks for this folder to become the project.
+    val pendingProjectDir by ExternalProjectOpen.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingProjectDir) {
+        val dir = pendingProjectDir ?: return@LaunchedEffect
+        viewModel.onEvent(FileTreeEvent.OpenProject(dir))
+        ExternalProjectOpen.consume(dir)
+    }
+    if (showRunCommand) {
+        TermuxRunDialog(
+            dir = state.root,
+            onOpenTerminal = openTermux,
+            onDismiss = { showRunCommand = false },
+        )
+    }
     val copyPath: (File) -> Unit = { file ->
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText(file.name, file.path))
@@ -268,6 +300,8 @@ fun WorkspaceScreen(
                     onOpenGitHub = { onOpenGitHub(state.root) },
                     onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
                     onOpenTerminal = onOpenTerminal,
+                    onRunCommand = onRunCommand,
+                    terminalEnabled = TermuxSetupPrefs.enabled(context).value,
                     onOpenSettings = onOpenSettings,
                     onCollapseSidebar = onCollapse,
                 )
@@ -334,6 +368,7 @@ fun WorkspaceScreen(
                         },
                         onOpenSettings = onOpenSettings,
                         navigationIcon = showSidebarButton,
+                        onOpenTermuxSetup = onOpenTermuxSetup,
                     )
                 } else {
                     WorkspaceEmptyEditorPane(
@@ -362,6 +397,7 @@ fun WorkspaceScreen(
                             },
                             onOpenSettings = onOpenSettings,
                             navigationIcon = null,
+                            onOpenTermuxSetup = onOpenTermuxSetup,
                         )
                     } else {
                         WorkspaceEmptyEditorPane(
@@ -425,6 +461,8 @@ private fun WorkspaceTopBar(
     onOpenGitHub: () -> Unit = {},
     onOpenAi: (() -> Unit)? = null,
     onOpenTerminal: () -> Unit = {},
+    onRunCommand: () -> Unit = {},
+    terminalEnabled: Boolean = false,
     onOpenSettings: () -> Unit = {},
     onCollapseSidebar: (() -> Unit)? = null,
 ) {
@@ -505,14 +543,24 @@ private fun WorkspaceTopBar(
                             onEvent(FileTreeEvent.CollapseAll)
                         },
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.menu_terminal)) },
-                        leadingIcon = { Icon(XIcons.Terminal, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onOpenTerminal()
-                        },
-                    )
+                    if (terminalEnabled) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_terminal)) },
+                            leadingIcon = { Icon(XIcons.Terminal, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onOpenTerminal()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_run_command)) },
+                            leadingIcon = { Icon(XIcons.PlayArrow, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onRunCommand()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_settings)) },
                         leadingIcon = { Icon(XIcons.Settings, contentDescription = null) },

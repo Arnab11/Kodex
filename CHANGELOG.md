@@ -8,6 +8,22 @@ stable releases.
 When cutting a release, add a `## [x.y.z] - YYYY-MM-DD` section for it; the release workflows
 pick the matching section as the GitHub Release notes.
 
+## [Unreleased]
+
+### ✨ Added
+
+#### 💻 Terminal (via Termux)
+- 🔌 **Optional terminal, off by default** — switch it on in **Settings → Workspace → Terminal (Termux)**. Nothing is bundled in the APK (+0 MB): Kodex hands off to the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings a real terminal and packages such as git, ssh, python, node and clang.
+- 🖥️ **Terminal** — Workspace ⋮ → *Terminal* opens a Termux session already inside the project folder.
+- ▶️ **Run command…** — Workspace ⋮ runs one command in the project folder in the background and shows its output and exit code inside Kodex. The last commands are kept as chips; output can be copied. Output arrives when the command finishes (no live stream, no keyboard input) — use *Terminal* for interactive programs.
+- 🏃 **Run file** — a ▶ button in the editor saves the file and runs it in a visible Termux session in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`. If the interpreter is missing it says which package to install.
+- 🔗 **`kodex` command in Termux** — `kodex file.py` opens a file in the editor, `kodex .` or `kodex folder` opens that folder as the project. It is installed automatically whenever Kodex opens a Termux session.
+- 🧭 **Termux setup screen** (*Settings → Workspace → Termux setup*) — live connection checks, a preset dropdown (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, a mirror dropdown, git name and email, and switches for storage access and upgrading first. The install runs in a visible Termux session and Kodex verifies the result afterwards. It never pops up on its own: if Termux is not ready, a snackbar offers a *Setup* button.
+
+### 📝 Notes
+- Needs the Termux app and a one-time step in it (`allow-external-apps`), which Kodex cannot switch on itself; the setup screen copies the command for you.
+- New permission: `com.termux.permission.RUN_COMMAND`.
+
 ## [1.3.0] - 2026-11-11
 
 **Git, Tools & background-work release.** A full Tools hub (keystore generator, file splitter, image tracer), a much smarter and safer AI that can work with git, a Reflog screen, and Git network actions that keep running when you leave the app.

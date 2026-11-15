@@ -100,6 +100,7 @@ fun EditorScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    navigationIcon: (@Composable () -> Unit)? = null,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -202,6 +203,7 @@ fun EditorScreen(
         topBar = {
             EditorTopBar(
                 onBack = onBack,
+                navigationIcon = navigationIcon,
                 actions = {
                     HistoryButton(
                         enabled = canUndo,
@@ -508,6 +510,7 @@ private fun EditorTopBar(
     actions: @Composable () -> Unit,
     pinned: @Composable () -> Unit,
     overflow: @Composable () -> Unit,
+    navigationIcon: (@Composable () -> Unit)? = null,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
@@ -517,8 +520,12 @@ private fun EditorTopBar(
                 .height(56.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
+            if (navigationIcon != null) {
+                navigationIcon()
+            } else {
+                IconButton(onClick = onBack) {
+                    Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                }
             }
             Row(
                 modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),

@@ -90,6 +90,7 @@ fun CategoryRow(
     modifier: Modifier = Modifier,
     isFirst: Boolean = false,
     isLast: Boolean = false,
+    isSelected: Boolean = false,
 ) {
     val rowShape = when {
         isFirst && isLast -> RoundedCornerShape(20.dp)
@@ -97,24 +98,55 @@ fun CategoryRow(
         isLast -> RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
         else -> RectangleShape
     }
+    val backgroundModifier = if (isSelected) {
+        Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+    } else {
+        Modifier
+    }
+    val titleColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val subtitleColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.78f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val iconBoxBg = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    }
+    val iconTint = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val chevronTint = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .clip(rowShape)
+            .then(backgroundModifier)
             .expressiveClickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
     ) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                .background(iconBoxBg, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = iconTint,
                 modifier = Modifier.size(24.dp),
             )
         }
@@ -124,14 +156,14 @@ fun CategoryRow(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = titleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = subtitleColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -140,7 +172,7 @@ fun CategoryRow(
         Icon(
             imageVector = chevron,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.outline,
+            tint = chevronTint,
             modifier = Modifier.size(22.dp),
         )
     }

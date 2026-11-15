@@ -63,6 +63,7 @@ import com.invictus.kodex.feature.search.CodeSearchScreen
 import com.invictus.kodex.feature.search.SearchBus
 import com.invictus.kodex.feature.settings.SettingsRootScreen
 import com.invictus.kodex.feature.workspace.WorkspaceScreen
+import com.invictus.kodex.ui.adaptive.isTabletLayout
 import com.invictus.kodex.ai.AiGate
 
 /** Shared-axis-X (slide + fade) screen transition, tween-based — cheap on low-end devices. */
@@ -164,6 +165,7 @@ fun KodexNavHost(
         }
         composable(Routes.WORKSPACE) {
             WorkspaceScreen(
+                editorViewModel = editorViewModel,
                 onOpenFile = { file ->
                     // zip / 7z / rar open as a browsable folder, not as a (binary) editor tab.
                     if (ArchiveReader.isArchive(file)) navController.navigate(Routes.archive(file.absolutePath))
@@ -194,6 +196,7 @@ fun KodexNavHost(
         }
         composable(Routes.SETTINGS) {
             SettingsRootScreen(
+                viewModel = editorViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenAppearance = { navController.navigate(Routes.SETTINGS_APPEARANCE) },
                 onOpenEditing = { navController.navigate(Routes.SETTINGS_EDITING) },
@@ -454,10 +457,16 @@ fun KodexNavHost(
     var externalNavPending by remember { mutableStateOf(false) }
     val externalScope = rememberCoroutineScope()
 
-    LaunchedEffect(editorViewModel) {
+    val isTablet = isTabletLayout()
+
+    LaunchedEffect(editorViewModel, isTablet) {
         editorViewModel.showEditor.collect {
             val route = navController.currentBackStackEntry?.destination?.route
-            if (route == Routes.WORKSPACE || route == Routes.CODE_SEARCH || route == Routes.GIT) {
+            if (route == Routes.WORKSPACE) {
+                if (!isTablet) {
+                    navController.navigate(Routes.EDITOR) { launchSingleTop = true }
+                }
+            } else if (route == Routes.CODE_SEARCH || route == Routes.GIT) {
                 navController.navigate(Routes.EDITOR) { launchSingleTop = true }
             } else if (externalNavPending && route != null && route != Routes.EDITOR &&
                 route != Routes.PERMISSION && route != Routes.MEDIA_PREVIEW

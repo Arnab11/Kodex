@@ -26,6 +26,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.invictus.kodex.ui.adaptive.AdaptiveTwoPaneLayout
+import com.invictus.kodex.ui.adaptive.isTabletLayout
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -253,74 +259,189 @@ fun HomeScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
-            if (!searching) {
-                item(key = "hero") {
-                    HeroBanner(Modifier.padding(horizontal = HomeEdge))
-                }
-                item(key = "actions") {
-                    Row(
-                        // The label below carries 8dp of its own vertical inset, so take that off the
-                        // bottom: hero->buttons and buttons->"Recent Projects" both measure HomeSectionGap.
-                        Modifier.fillMaxWidth().padding(top = HomeSectionGap, bottom = HomeSectionGap - 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
+        val isTablet = isTabletLayout()
+        if (isTablet) {
+            AdaptiveTwoPaneLayout(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                isDualPane = true,
+                firstPane = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        Button(onClick = { showProjectSheet = true }, shape = RoundedCornerShape(14.dp)) {
-                            Icon(XIcons.FolderOpen, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.home_open_project))
-                        }
-                        FilledTonalIconButton(onClick = { showNewSheet = true }, shape = RoundedCornerShape(14.dp)) {
-                            Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
-                        }
-                    }
-                }
-                item(key = "header") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = HomeEdge, end = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_recent),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        HeroBanner(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 480.dp),
                         )
-                        if (projectsState.recents.size > HomeRecentLimit) {
-                            TextButton(onClick = onViewAll) { Text(stringResource(R.string.home_view_all)) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 480.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(
+                                onClick = { showProjectSheet = true },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(XIcons.FolderOpen, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.home_open_project))
+                            }
+                            FilledTonalButton(
+                                onClick = { showNewSheet = true },
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Icon(XIcons.Add, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.home_new_project))
+                            }
+                        }
+                    }
+                },
+                secondPane = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(if (searching) R.string.home_search else R.string.home_recent),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (!searching && projectsState.recents.size > 10) {
+                                TextButton(onClick = onViewAll) {
+                                    Text(stringResource(R.string.home_view_all))
+                                }
+                            }
+                        }
+                        val shown = if (searching) filtered else filtered.take(15)
+                        val tileColors = shown.map { it.file.path }.zip(projectColorsFor(shown.map { it.file.name })).toMap()
+                        if (shown.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(if (searching) R.string.home_no_matches else R.string.home_no_recents),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                items(items = shown, key = { "tp:" + it.file.path }) { item ->
+                                    ProjectCardRow(
+                                        tileColor = tileColors[item.file.path],
+                                        item = item,
+                                        onOpen = { openProject(item.file) },
+                                        onRemove = { projectsViewModel.onEvent(ProjectsEvent.RemoveRecent(item.file.path)) },
+                                        onTogglePin = { projectsViewModel.onEvent(ProjectsEvent.TogglePin(item.file.path, !item.pinned)) },
+                                        onRename = { projectsViewModel.onEvent(ProjectsEvent.StartRename(item.file)) },
+                                        onDelete = { projectsViewModel.onEvent(ProjectsEvent.StartDelete(item.file)) },
+                                        onInfo = { projectsViewModel.onEvent(ProjectsEvent.ShowInfo(item.file)) },
+                                        onCopyPath = { copyPath(item.file) },
+                                        onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(item.file)) },
+                                        isBackingUp = item.file.path in projectsState.backingUp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                if (!searching) {
+                    item(key = "hero") {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            HeroBanner(Modifier.padding(horizontal = HomeEdge).widthIn(max = 720.dp))
+                        }
+                    }
+                    item(key = "actions") {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Row(
+                                Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = HomeSectionGap, bottom = HomeSectionGap - 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Button(onClick = { showProjectSheet = true }, shape = RoundedCornerShape(14.dp)) {
+                                    Icon(XIcons.FolderOpen, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.home_open_project))
+                                }
+                                FilledTonalIconButton(onClick = { showNewSheet = true }, shape = RoundedCornerShape(14.dp)) {
+                                    Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
+                                }
+                            }
+                        }
+                    }
+                    item(key = "header") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = HomeEdge, end = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_recent),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                            )
+                            if (projectsState.recents.size > HomeRecentLimit) {
+                                TextButton(onClick = onViewAll) { Text(stringResource(R.string.home_view_all)) }
+                            }
                         }
                     }
                 }
-            }
-            val shown = if (searching) filtered else filtered.take(HomeRecentLimit)
-            val tileColors = shown.map { it.file.path }.zip(projectColorsFor(shown.map { it.file.name })).toMap()
-            if (shown.isEmpty()) {
-                item(key = "empty") {
-                    Text(
-                        text = stringResource(if (searching) R.string.home_no_matches else R.string.home_no_recents),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                    )
-                }
-            } else {
-                items(items = shown, key = { "r:" + it.file.path }) { item ->
-                    ProjectCardRow(
-                        tileColor = tileColors[item.file.path],
-                        item = item,
-                        onOpen = { openProject(item.file) },
-                        onRemove = { projectsViewModel.onEvent(ProjectsEvent.RemoveRecent(item.file.path)) },
-                        onTogglePin = { projectsViewModel.onEvent(ProjectsEvent.TogglePin(item.file.path, !item.pinned)) },
-                        onRename = { projectsViewModel.onEvent(ProjectsEvent.StartRename(item.file)) },
-                        onDelete = { projectsViewModel.onEvent(ProjectsEvent.StartDelete(item.file)) },
-                        onInfo = { projectsViewModel.onEvent(ProjectsEvent.ShowInfo(item.file)) },
-                        onCopyPath = { copyPath(item.file) },
-                        onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(item.file)) },
-                        isBackingUp = item.file.path in projectsState.backingUp,
-                    )
+                val shown = if (searching) filtered else filtered.take(HomeRecentLimit)
+                val tileColors = shown.map { it.file.path }.zip(projectColorsFor(shown.map { it.file.name })).toMap()
+                if (shown.isEmpty()) {
+                    item(key = "empty") {
+                        Text(
+                            text = stringResource(if (searching) R.string.home_no_matches else R.string.home_no_recents),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        )
+                    }
+                } else {
+                    items(items = shown, key = { "r:" + it.file.path }) { item ->
+                        ProjectCardRow(
+                            tileColor = tileColors[item.file.path],
+                            item = item,
+                            onOpen = { openProject(item.file) },
+                            onRemove = { projectsViewModel.onEvent(ProjectsEvent.RemoveRecent(item.file.path)) },
+                            onTogglePin = { projectsViewModel.onEvent(ProjectsEvent.TogglePin(item.file.path, !item.pinned)) },
+                            onRename = { projectsViewModel.onEvent(ProjectsEvent.StartRename(item.file)) },
+                            onDelete = { projectsViewModel.onEvent(ProjectsEvent.StartDelete(item.file)) },
+                            onInfo = { projectsViewModel.onEvent(ProjectsEvent.ShowInfo(item.file)) },
+                            onCopyPath = { copyPath(item.file) },
+                            onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(item.file)) },
+                            isBackingUp = item.file.path in projectsState.backingUp,
+                        )
+                    }
                 }
             }
         }

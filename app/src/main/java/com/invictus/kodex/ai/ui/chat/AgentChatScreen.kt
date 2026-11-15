@@ -53,6 +53,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -152,13 +154,26 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
             )
         },
     ) { padding ->
-        AgentChatContent(
-            vm, Modifier.padding(padding).fillMaxSize().imePadding(),
-            onOpenSettings = onOpenSettings,
-            historyOpen = showHistory, onHistoryOpenChange = { showHistory = it },
-            memoryOpen = showMemory, onMemoryOpenChange = { showMemory = it },
-            headerActions = false,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            AgentChatContent(
+                vm,
+                Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                onOpenSettings = onOpenSettings,
+                historyOpen = showHistory, onHistoryOpenChange = { showHistory = it },
+                memoryOpen = showMemory, onMemoryOpenChange = { showMemory = it },
+                headerActions = false,
+            )
+        }
     }
 }
 

@@ -8,6 +8,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.invictus.kodex.ui.components.expressiveClickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import com.invictus.kodex.feature.editor.EditorEvent
+import com.invictus.kodex.feature.editor.EditorScreen
+import com.invictus.kodex.feature.editor.EditorViewModel
+import com.invictus.kodex.ui.adaptive.AdaptiveTwoPaneLayout
+import com.invictus.kodex.ui.adaptive.isTabletLayout
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -84,6 +99,7 @@ fun WorkspaceScreen(
     modifier: Modifier = Modifier,
     viewModel: FileTreeViewModel = viewModel(factory = FileTreeViewModel.Factory),
     projectsViewModel: ProjectsViewModel = viewModel(factory = ProjectsViewModel.Factory),
+    editorViewModel: EditorViewModel? = null,
     onOpenFile: ((File) -> Unit)? = null,
     externalMessages: Flow<UiText>? = null,
     onProjectRoot: (File) -> Unit = {},
@@ -97,6 +113,8 @@ fun WorkspaceScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(state.root) { onProjectRoot(state.root) }
     val projectsState by projectsViewModel.uiState.collectAsStateWithLifecycle()
+    val isTablet = isTabletLayout()
+    var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
     val isGitRepo by produceState(false, state.root) {
         value = withContext(Dispatchers.IO) { File(state.root, ".git").isDirectory }
     }
@@ -204,61 +222,127 @@ fun WorkspaceScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            WorkspaceTopBar(
-                state = state,
-                onEvent = viewModel::onEvent,
-                onOpenProjectSheet = { showProjectSheet = true },
-                onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
-                onOpenCodeSearch = { onOpenCodeSearch(state.root) },
-                onOpenGitHub = { onOpenGitHub(state.root) },
-                onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
-                onOpenSettings = onOpenSettings,
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            val clipboard = state.clipboard
-            if (clipboard != null) {
-                ClipboardBar(clipboard = clipboard, onClear = { viewModel.onEvent(FileTreeEvent.ClearClipboard) })
-            }
-        },
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-                .imePadding(),
-        ) {
-            val rootError = state.rootError
-            if (rootError != null) {
-                Text(
-                    text = rootError.asString(),
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                    color = MaterialTheme.colorScheme.error,
+    val fileTreeContent: @Composable (onCollapseSidebar: (() -> Unit)?) -> Unit = { onCollapse ->
+        Scaffold(
+            modifier = modifier,
+            topBar = {
+                WorkspaceTopBar(
+                    state = state,
+                    onEvent = viewModel::onEvent,
+                    onOpenProjectSheet = { showProjectSheet = true },
+                    onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
+                    onOpenCodeSearch = { onOpenCodeSearch(state.root) },
+                    onOpenGitHub = { onOpenGitHub(state.root) },
+                    onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
+                    onOpenSettings = onOpenSettings,
+                    onCollapseSidebar = onCollapse,
                 )
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    FileFilterBar(
-                        query = filterQuery,
-                        onQueryChange = { filterQuery = it },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                val clipboard = state.clipboard
+                if (clipboard != null) {
+                    ClipboardBar(clipboard = clipboard, onClear = { viewModel.onEvent(FileTreeEvent.ClearClipboard) })
+                }
+            },
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding(),
+            ) {
+                val rootError = state.rootError
+                if (rootError != null) {
+                    Text(
+                        text = rootError.asString(),
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        color = MaterialTheme.colorScheme.error,
                     )
-                    FileTree(
-                        state = state,
-                        onEvent = viewModel::onEvent,
-                        onCopyPath = copyPath,
-                        listState = listState,
-                        filterQuery = filterQuery,
-                        onSearchResultOpened = { filterQuery = "" },
-                        modifier = Modifier.weight(1f),
-                    )
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        FileFilterBar(
+                            query = filterQuery,
+                            onQueryChange = { filterQuery = it },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        FileTree(
+                            state = state,
+                            onEvent = viewModel::onEvent,
+                            onCopyPath = copyPath,
+                            listState = listState,
+                            filterQuery = filterQuery,
+                            onSearchResultOpened = { filterQuery = "" },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (isTablet && editorViewModel != null) {
+        val editorState by editorViewModel.uiState.collectAsStateWithLifecycle()
+        val showSidebarButton: @Composable () -> Unit = {
+            IconButton(onClick = { sidebarCollapsed = false }) {
+                Icon(XIcons.Menu, contentDescription = "Expand explorer")
+            }
+        }
+
+        if (sidebarCollapsed) {
+            Box(Modifier.fillMaxSize()) {
+                if (editorState.tabs.isNotEmpty()) {
+                    EditorScreen(
+                        viewModel = editorViewModel,
+                        onBack = {
+                            editorState.activePath?.let { editorViewModel.onEvent(EditorEvent.CloseTab(it)) }
+                        },
+                        onOpenSettings = onOpenSettings,
+                        navigationIcon = showSidebarButton,
+                    )
+                } else {
+                    WorkspaceEmptyEditorPane(
+                        projectRoot = state.root,
+                        onOpenSearch = { onOpenCodeSearch(state.root) },
+                        onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
+                        onOpenSettings = onOpenSettings,
+                        navigationIcon = showSidebarButton,
+                    )
+                }
+            }
+        } else {
+            AdaptiveTwoPaneLayout(
+                modifier = Modifier.fillMaxSize(),
+                isDualPane = true,
+                firstPaneWidth = 320.dp,
+                firstPane = {
+                    fileTreeContent { sidebarCollapsed = true }
+                },
+                secondPane = {
+                    if (editorState.tabs.isNotEmpty()) {
+                        EditorScreen(
+                            viewModel = editorViewModel,
+                            onBack = {
+                                editorState.activePath?.let { editorViewModel.onEvent(EditorEvent.CloseTab(it)) }
+                            },
+                            onOpenSettings = onOpenSettings,
+                            navigationIcon = null,
+                        )
+                    } else {
+                        WorkspaceEmptyEditorPane(
+                            projectRoot = state.root,
+                            onOpenSearch = { onOpenCodeSearch(state.root) },
+                            onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
+                            onOpenSettings = onOpenSettings,
+                            navigationIcon = null,
+                        )
+                    }
+                },
+            )
+        }
+    } else {
+        fileTreeContent(null)
     }
 
     TreeDialogHost(dialog = state.dialog, onEvent = viewModel::onEvent)
@@ -307,9 +391,17 @@ private fun WorkspaceTopBar(
     onOpenGitHub: () -> Unit = {},
     onOpenAi: (() -> Unit)? = null,
     onOpenSettings: () -> Unit = {},
+    onCollapseSidebar: (() -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
+        navigationIcon = {
+            if (onCollapseSidebar != null) {
+                IconButton(onClick = onCollapseSidebar) {
+                    Icon(XIcons.MenuOpen, contentDescription = "Collapse explorer")
+                }
+            }
+        },
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -465,6 +557,99 @@ private fun ClipboardBar(clipboard: Clipboard, onClear: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onClear) { Text(stringResource(R.string.action_clear)) }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceEmptyEditorPane(
+    projectRoot: File,
+    onOpenSearch: () -> Unit,
+    onOpenGit: (() -> Unit)?,
+    onOpenSettings: () -> Unit,
+    navigationIcon: (@Composable () -> Unit)? = null,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        if (navigationIcon != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .height(56.dp)
+                        .padding(start = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    navigationIcon()
+                }
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(32.dp)
+                .widthIn(max = 520.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    XIcons.Code,
+                    contentDescription = null,
+                    modifier = Modifier.size(38.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                text = projectRoot.name.ifEmpty { stringResource(R.string.app_name) },
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.workspace_tablet_empty_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = onOpenSearch,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(XIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.search_code_title))
+                }
+                if (onOpenGit != null) {
+                    FilledTonalButton(
+                        onClick = onOpenGit,
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(XIcons.Commit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.git_title))
+                    }
+                }
+            }
         }
     }
 }

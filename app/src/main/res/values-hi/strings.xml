@@ -18,6 +18,8 @@
     <string name="git_history_mode_author">Author</string>
     <string name="git_history_mode_hash">Hash</string>
     <string name="git_history_empty">कोई commit नहीं मिला।</string>
+    <string name="git_history_select_commit">विवरण देखने के लिए कोई कमिट चुनें</string>
+    <string name="workspace_tablet_empty_hint">संपादन शुरू करने के लिए बाईं ओर से कोई फ़ाइल चुनें</string>
     <string name="git_cherry_pick">Cherry-pick</string>
     <string name="git_stash_title">Stash</string>
     <string name="git_stash_create">Stash करें</string>

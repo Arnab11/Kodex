@@ -1,5 +1,6 @@
 package com.invictus.kodex
 
+import androidx.compose.runtime.LaunchedEffect
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -67,8 +68,12 @@ class MainActivity : ComponentActivity() {
                 viewModel.onEvent(MainUiEvent.RefreshPermission)
             }
 
+            // Looks for a new version once per launch, only when the setting is on (off by default).
+            LaunchedEffect(Unit) { com.invictus.kodex.core.update.UpdateController.autoCheckOnLaunch() }
+
             KodexTheme {
                 Box(Modifier.fillMaxSize()) {
+                    com.invictus.kodex.ui.update.UpdateSheetHost()
                     KodexNavHost(
                         storageGranted = uiState.storageGranted,
                         notificationGranted = uiState.notificationGranted,

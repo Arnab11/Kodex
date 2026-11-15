@@ -1,5 +1,13 @@
 package com.invictus.kodex.feature.settings
 
+import com.invictus.kodex.core.update.UpdateState
+import com.invictus.kodex.core.update.UpdateController
+import com.invictus.kodex.core.update.UpdateChannel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import com.invictus.kodex.ui.theme.ThemeSettings
 import com.invictus.kodex.ui.theme.AppTheme
 import androidx.compose.ui.graphics.Color
@@ -104,6 +112,10 @@ fun AboutScreen(
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))) }
                 },
             )
+
+            Spacer(Modifier.height(8.dp))
+            SettingsSectionHeader(title = stringResource(R.string.update_section))
+            UpdatesCard()
 
             Spacer(Modifier.height(8.dp))
             SettingsSectionHeader(title = stringResource(R.string.about_support_title))
@@ -367,6 +379,67 @@ private fun SupportCard() {
             Icon(XIcons.MonetizationOn, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(text = stringResource(R.string.about_upi_send), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Check for updates, pick the channel (Stable / Preview) and choose whether Kodex checks by itself on launch. */
+@Composable
+private fun UpdatesCard() {
+    val state by UpdateController.state.collectAsState()
+    val channel by UpdateController.channel.collectAsState()
+    val auto by UpdateController.autoCheck.collectAsState()
+    SettingsSectionCard(contentPadding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = when (val s = state) {
+                        is UpdateState.Checking -> stringResource(R.string.update_checking)
+                        is UpdateState.UpToDate -> stringResource(R.string.update_up_to_date)
+                        is UpdateState.Available -> stringResource(R.string.update_available_row, s.info.version)
+                        is UpdateState.Downloading -> stringResource(R.string.update_downloading_row)
+                        is UpdateState.Ready -> stringResource(R.string.update_ready_row)
+                        is UpdateState.Error -> s.message
+                        is UpdateState.Idle -> stringResource(R.string.update_check)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (state is UpdateState.Error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            when (state) {
+                is UpdateState.Checking -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready ->
+                    Button(onClick = { UpdateController.showSheet() }) { Text(stringResource(R.string.update_view)) }
+                else -> OutlinedButton(onClick = { UpdateController.check(manual = true) }) {
+                    Text(stringResource(R.string.update_check))
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = channel == UpdateChannel.STABLE,
+                onClick = { UpdateController.setChannel(UpdateChannel.STABLE) },
+                label = { Text(stringResource(R.string.update_channel_stable)) },
+            )
+            FilterChip(
+                selected = channel == UpdateChannel.PREVIEW,
+                onClick = { UpdateController.setChannel(UpdateChannel.PREVIEW) },
+                label = { Text(stringResource(R.string.update_channel_preview)) },
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.update_auto_check), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(R.string.update_auto_check_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = auto, onCheckedChange = { UpdateController.setAutoCheck(it) })
         }
     }
 }

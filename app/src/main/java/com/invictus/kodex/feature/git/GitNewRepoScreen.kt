@@ -2,7 +2,9 @@ package com.invictus.kodex.feature.git
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -111,15 +113,22 @@ fun GitNewRepoScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .consumeWindowInsets(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp),
+                .consumeWindowInsets(padding),
+            contentAlignment = Alignment.TopCenter,
         ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp),
+            ) {
             if (state.busy) {
                 LinearProgressIndicator(Modifier.fillMaxWidth(), color = p.accent)
                 Text(
@@ -180,6 +189,7 @@ fun GitNewRepoScreen(
             }
         }
     }
+}
 }
 
 @Composable

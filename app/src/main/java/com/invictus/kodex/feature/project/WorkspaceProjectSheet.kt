@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,7 +83,8 @@ fun WorkspaceProjectSheet(
     val otherColors = others.map { it.file.path }.zip(colors.drop(1)).toMap()
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth()) {
             Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 10.dp)) {
                 Text(
                     text = stringResource(R.string.sheet_title),
@@ -140,6 +142,7 @@ fun WorkspaceProjectSheet(
                 }
             }
             SnackbarHost(snackbarHostState)
+        }
         }
     }
 

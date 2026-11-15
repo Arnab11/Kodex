@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -171,19 +172,27 @@ fun GitCloneScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp),
+                .consumeWindowInsets(innerPadding),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            SourceCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
-            DestinationCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
-            if (state.cloning || state.logLines.isNotEmpty()) {
-                ProgressCard(state = state)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp),
+            ) {
+                SourceCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
+                DestinationCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
+                if (state.cloning || state.logLines.isNotEmpty()) {
+                    ProgressCard(state = state)
+                }
             }
         }
     }

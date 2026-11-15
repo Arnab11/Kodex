@@ -1,5 +1,8 @@
 package com.invictus.kodex.feature.git
 
+import androidx.compose.foundation.background
+import com.invictus.kodex.ui.adaptive.AdaptiveTwoPaneLayout
+import com.invictus.kodex.ui.adaptive.isTabletLayout
 import com.invictus.kodex.ai.AiGate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -404,205 +407,258 @@ fun GitHistoryScreen(projectPath: String, filePath: String? = null, onBack: () -
         vm.messages.collect { msg -> msg?.let { snackbar.showSnackbar(it); vm.messageHandled() } }
     }
 
-    BackHandler(enabled = ui.detail != null) {
+    val isTablet = isTabletLayout()
+
+    // On tablet, auto-select the latest commit if nothing is selected yet
+    LaunchedEffect(isTablet, ui.commits) {
+        if (isTablet && ui.detail == null && ui.commits.isNotEmpty()) {
+            vm.openDetail(ui.commits.first())
+        }
+    }
+
+    BackHandler(enabled = if (isTablet) ui.selectedFile != null else ui.detail != null) {
         if (ui.selectedFile != null) vm.closeFile() else vm.dismissDetail()
     }
 
-    Box(Modifier.fillMaxSize()) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (filePath != null) {
-                            stringResource(R.string.git_history_title) + ": $filePath"
-                        } else {
-                            stringResource(R.string.git_history_title)
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            OutlinedTextField(
-                value = ui.query,
-                onValueChange = vm::onQueryChange,
-                placeholder = { Text(stringResource(R.string.git_history_search_hint)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                GitLogSearchMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = ui.mode == mode,
-                        onClick = { vm.onModeChange(mode) },
-                        label = {
-                            Text(
-                                stringResource(
-                                    when (mode) {
-                                        GitLogSearchMode.MESSAGE -> R.string.git_history_mode_message
-                                        GitLogSearchMode.AUTHOR -> R.string.git_history_mode_author
-                                        GitLogSearchMode.HASH -> R.string.git_history_mode_hash
-                                    },
-                                ),
-                            )
-                        },
-                        modifier = Modifier.padding(end = 6.dp),
-                    )
-                }
-            }
-            LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                items(
-                    rows,
-                    key = { r ->
-                        when (r) {
-                            is HistoryRow.Header -> "author:${r.author}"
-                            is HistoryRow.Item -> r.commit.id
+    val historyListContent: @Composable () -> Unit = {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            if (filePath != null) {
+                                stringResource(R.string.git_history_title) + ": $filePath"
+                            } else {
+                                stringResource(R.string.git_history_title)
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
                         }
                     },
-                ) { row ->
-                    when (row) {
-                        is HistoryRow.Header -> Text(
-                            stringResource(R.string.git_history_author_group, row.author, row.count),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 2.dp),
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                OutlinedTextField(
+                    value = ui.query,
+                    onValueChange = vm::onQueryChange,
+                    placeholder = { Text(stringResource(R.string.git_history_search_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    GitLogSearchMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = ui.mode == mode,
+                            onClick = { vm.onModeChange(mode) },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (mode) {
+                                            GitLogSearchMode.MESSAGE -> R.string.git_history_mode_message
+                                            GitLogSearchMode.AUTHOR -> R.string.git_history_mode_author
+                                            GitLogSearchMode.HASH -> R.string.git_history_mode_hash
+                                        },
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.padding(end = 6.dp),
                         )
-                        is HistoryRow.Item -> {
-                            val c = row.commit
-                            Box {
-                                Column(
+                    }
+                }
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    items(
+                        rows,
+                        key = { r ->
+                            when (r) {
+                                is HistoryRow.Header -> "author:${r.author}"
+                                is HistoryRow.Item -> r.commit.id
+                            }
+                        },
+                    ) { row ->
+                        when (row) {
+                            is HistoryRow.Header -> Text(
+                                stringResource(R.string.git_history_author_group, row.author, row.count),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 2.dp),
+                            )
+                            is HistoryRow.Item -> {
+                                val c = row.commit
+                                val isSelected = isTablet && ui.detail?.id == c.id
+                                val selectionBg = if (isSelected) {
+                                    Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                                } else {
                                     Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = { vm.openDetail(c) },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menuFor = c.id
-                                            },
-                                        )
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                }
+                                Box(modifier = selectionBg) {
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .combinedClickable(
+                                                onClick = { vm.openDetail(c) },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menuFor = c.id
+                                                },
+                                            )
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                c.shortId,
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    fontFamily = if (ui.mode == GitLogSearchMode.HASH) FontFamily.Monospace else null,
+                                                    fontWeight = if (ui.mode == GitLogSearchMode.HASH) FontWeight.Bold else null,
+                                                ),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .quickLongPress(
+                                                        onTap = { vm.openDetail(c) },
+                                                        onLongPress = {
+                                                            clipboard.setText(AnnotatedString(c.id))
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            vm.showMessage(hashCopiedMsg)
+                                                        },
+                                                    )
+                                                    .padding(end = 16.dp, top = 4.dp, bottom = 4.dp),
+                                            )
+                                            Spacer(Modifier.weight(1f))
+                                            Text(
+                                                historyTimeFormat.format(Date(c.timeMs)),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                         Text(
-                                            c.shortId,
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontFamily = if (ui.mode == GitLogSearchMode.HASH) FontFamily.Monospace else null,
-                                                fontWeight = if (ui.mode == GitLogSearchMode.HASH) FontWeight.Bold else null,
-                                            ),
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier
-                                                .quickLongPress(
-                                                    onTap = { vm.openDetail(c) },
-                                                    onLongPress = {
-                                                        clipboard.setText(AnnotatedString(c.id))
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        vm.showMessage(hashCopiedMsg)
-                                                    },
-                                                )
-                                                .padding(end = 16.dp, top = 4.dp, bottom = 4.dp),
+                                            c.message.lineSequence().firstOrNull().orEmpty(),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodyMedium,
                                         )
-                                        Spacer(Modifier.weight(1f))
                                         Text(
-                                            historyTimeFormat.format(Date(c.timeMs)),
-                                            style = MaterialTheme.typography.labelSmall,
+                                            c.author,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                    Text(
-                                        c.message.lineSequence().firstOrNull().orEmpty(),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        c.author,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = menuFor == c.id,
-                                    onDismissRequest = { menuFor = null },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.git_change_author)) },
-                                        leadingIcon = { Icon(XIcons.Person, contentDescription = null) },
-                                        onClick = {
-                                            menuFor = null
-                                            vm.openChangeAuthor(c)
-                                        },
-                                    )
+                                    DropdownMenu(
+                                        expanded = menuFor == c.id,
+                                        onDismissRequest = { menuFor = null },
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.git_change_author)) },
+                                            leadingIcon = { Icon(XIcons.Person, contentDescription = null) },
+                                            onClick = {
+                                                menuFor = null
+                                                vm.openChangeAuthor(c)
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                if (ui.hasMore && ui.query.isBlank()) {
-                    item(key = "load_more") {
-                        Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                            TextButton(onClick = vm::loadMore, enabled = !ui.loadingMore) {
-                                if (ui.loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text(stringResource(R.string.git_history_load_more))
+                    if (ui.hasMore && ui.query.isBlank()) {
+                        item(key = "load_more") {
+                            Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                                TextButton(onClick = vm::loadMore, enabled = !ui.loadingMore) {
+                                    if (ui.loadingMore) {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Text(stringResource(R.string.git_history_load_more))
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                if (!ui.loading && ui.commits.isEmpty()) {
-                    item {
-                        Text(
-                            stringResource(R.string.git_history_empty),
-                            Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    if (!ui.loading && ui.commits.isEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.git_history_empty),
+                                Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    ui.detail?.let { c ->
-        GitCommitDetailScreen(
-            commit = c,
-            files = ui.files,
-            filesLoading = ui.filesLoading,
-            selectedFile = ui.selectedFile,
-            fileDiff = ui.fileDiff,
-            diffLoading = ui.diffLoading,
-            totalAdded = ui.totalAdded,
-            totalRemoved = ui.totalRemoved,
-            picking = ui.picking,
-            onOpenFile = vm::openFile,
-            onCloseFile = vm::closeFile,
-            onCherryPick = { vm.cherryPick(c.id) },
-            onReset = { vm.openReset(c) },
-            onCancel = vm::dismissDetail,
-            aiExplain = AiGate?.let { g ->
-                {
-                    g.ExplainDiffAi(
-                        projectPath = projectPath,
-                        commitId = c.id,
-                        filePaths = ui.files.map { it.path },
-                        app = LocalContext.current.applicationContext as android.app.Application,
+    val detailContent: @Composable () -> Unit = {
+        val c = ui.detail
+        if (c != null) {
+            GitCommitDetailScreen(
+                commit = c,
+                files = ui.files,
+                filesLoading = ui.filesLoading,
+                selectedFile = ui.selectedFile,
+                fileDiff = ui.fileDiff,
+                diffLoading = ui.diffLoading,
+                totalAdded = ui.totalAdded,
+                totalRemoved = ui.totalRemoved,
+                picking = ui.picking,
+                onOpenFile = vm::openFile,
+                onCloseFile = vm::closeFile,
+                onCherryPick = { vm.cherryPick(c.id) },
+                onReset = { vm.openReset(c) },
+                onCancel = { if (!isTablet) vm.dismissDetail() },
+                aiExplain = AiGate?.let { g ->
+                    {
+                        g.ExplainDiffAi(
+                            projectPath = projectPath,
+                            commitId = c.id,
+                            filePaths = ui.files.map { it.path },
+                            app = LocalContext.current.applicationContext as android.app.Application,
+                        )
+                    }
+                },
+            )
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        XIcons.Commit,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    Text(
+                        stringResource(R.string.git_history_select_commit),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            },
-        )
+            }
+        }
     }
+
+    if (isTablet) {
+        AdaptiveTwoPaneLayout(
+            modifier = Modifier.fillMaxSize(),
+            isDualPane = true,
+            firstPane = historyListContent,
+            secondPane = detailContent,
+        )
+    } else {
+        Box(Modifier.fillMaxSize()) {
+            historyListContent()
+            if (ui.detail != null) {
+                detailContent()
+            }
+        }
     }
 
     ui.authorTarget?.let { target ->

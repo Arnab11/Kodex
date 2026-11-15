@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -182,7 +183,8 @@ fun OpenProjectSheet(
                 }
             }
         }
-        Column(modifier = Modifier.fillMaxWidth().then(heightModifier).imePadding()) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth().then(heightModifier).imePadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -318,6 +320,7 @@ fun OpenProjectSheet(
                 }
             }
             SnackbarHost(snackbarHostState)
+        }
         }
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -98,12 +99,13 @@ fun NewProjectSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp).padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth().navigationBarsPadding().imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp).padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
             // Header: badge + title / subtitle.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -241,6 +243,7 @@ fun NewProjectSheet(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.new_project_create), style = MaterialTheme.typography.titleMedium)
             }
+        }
         }
     }
 }

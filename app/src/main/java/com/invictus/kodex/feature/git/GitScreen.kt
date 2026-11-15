@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.VerticalDivider
+import com.invictus.kodex.ui.adaptive.isTabletLayout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -396,67 +398,142 @@ private fun GitContent(
 ) {
     val snapshot = state.snapshot ?: return
     val status = state.status
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        // Breathing room under the last row so it never sits flush on the gesture bar.
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
-        item(key = "branch") {
-            BranchCard(snapshot, state, onEvent, onClick = onBranchClick)
-        }
-        item(key = "commit") { CommitCard(
-                state, onEvent,
-                aiGenerator = AiGate?.let { g ->
-                    {
-                        g.CommitMessageAi(
-                            projectPath = projectPath,
-                            // Staged diff is preferred; the generator falls back to the work-tree diff, so any change counts.
-                            hasChanges = state.status?.isClean == false,
-                            onFill = { msg -> onEvent(GitEvent.AiCommitText(msg, replace = false)) },
-                            onReplace = { msg -> onEvent(GitEvent.AiCommitText(msg, replace = true)) },
-                            amend = state.amend,
-                            app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application,
+    val isTablet = isTabletLayout()
+
+    val commitCardContent: @Composable () -> Unit = {
+        CommitCard(
+            state, onEvent,
+            aiGenerator = AiGate?.let { g ->
+                {
+                    g.CommitMessageAi(
+                        projectPath = projectPath,
+                        // Staged diff is preferred; the generator falls back to the work-tree diff, so any change counts.
+                        hasChanges = state.status?.isClean == false,
+                        onFill = { msg -> onEvent(GitEvent.AiCommitText(msg, replace = false)) },
+                        onReplace = { msg -> onEvent(GitEvent.AiCommitText(msg, replace = true)) },
+                        amend = state.amend,
+                        app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application,
+                    )
+                }
+            },
+        )
+    }
+
+    if (isTablet) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .width(380.dp)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                item(key = "branch") {
+                    BranchCard(snapshot, state, onEvent, onClick = onBranchClick)
+                }
+                item(key = "commit") {
+                    commitCardContent()
+                }
+                item(key = "sync") { SyncRow(canSync, snapshot, onEvent) }
+                if (snapshot.mergeInProgress || snapshot.rebaseInProgress) {
+                    item(key = "op-banner") { GitOperationBanner(state, onEvent) }
+                }
+            }
+            VerticalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                if (status != null && status.isClean) {
+                    item(key = "clean") {
+                        Text(
+                            text = stringResource(R.string.git_clean),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
                         )
                     }
-                },
-            ) }
-        item(key = "sync") { SyncRow(canSync, snapshot, onEvent) }
-        if (status != null && status.isClean) {
-            item(key = "clean") {
-                Text(
-                    text = stringResource(R.string.git_clean),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                )
+                }
+                status?.let { st ->
+                    conflictSection(st.conflicts, state.diffs, state.diffLoading, onEvent)
+                    changeSection(
+                        keyPrefix = "staged",
+                        titleRes = R.string.git_section_staged,
+                        changes = st.staged.filterNot { it.isConflict() },
+                        headerActionLabelRes = R.string.git_unstage_all,
+                        isStagedSection = true,
+                        state = state,
+                        onHeaderAction = { onEvent(GitEvent.UnstageAll) },
+                        onEvent = onEvent,
+                    )
+                    changeSection(
+                        keyPrefix = "changes",
+                        titleRes = R.string.git_section_changes,
+                        changes = st.unstaged.filter { it.unstaged != GitWorkingState.UNTRACKED && !it.isConflict() } + st.untracked,
+                        headerActionLabelRes = R.string.git_stage_all,
+                        isStagedSection = false,
+                        state = state,
+                        onHeaderAction = { onEvent(GitEvent.StageAll) },
+                        onEvent = onEvent,
+                    )
+                }
             }
         }
-        if (snapshot.mergeInProgress || snapshot.rebaseInProgress) {
-            item(key = "op-banner") { GitOperationBanner(state, onEvent) }
-        }
-        status?.let { st ->
-            conflictSection(st.conflicts, state.diffs, state.diffLoading, onEvent)
-            changeSection(
-                keyPrefix = "changes",
-                titleRes = R.string.git_section_changes,
-                changes = st.unstaged.filter { it.unstaged != GitWorkingState.UNTRACKED && !it.isConflict() } + st.untracked,
-                headerActionLabelRes = R.string.git_stage_all,
-                isStagedSection = false,
-                state = state,
-                onHeaderAction = { onEvent(GitEvent.StageAll) },
-                onEvent = onEvent,
-            )
-            changeSection(
-                keyPrefix = "staged",
-                titleRes = R.string.git_section_staged,
-                changes = st.staged.filterNot { it.isConflict() },
-                headerActionLabelRes = R.string.git_unstage_all,
-                isStagedSection = true,
-                state = state,
-                onHeaderAction = { onEvent(GitEvent.UnstageAll) },
-                onEvent = onEvent,
-            )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            // Breathing room under the last row so it never sits flush on the gesture bar.
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            item(key = "branch") {
+                BranchCard(snapshot, state, onEvent, onClick = onBranchClick)
+            }
+            item(key = "commit") {
+                commitCardContent()
+            }
+            item(key = "sync") { SyncRow(canSync, snapshot, onEvent) }
+            if (status != null && status.isClean) {
+                item(key = "clean") {
+                    Text(
+                        text = stringResource(R.string.git_clean),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    )
+                }
+            }
+            if (snapshot.mergeInProgress || snapshot.rebaseInProgress) {
+                item(key = "op-banner") { GitOperationBanner(state, onEvent) }
+            }
+            status?.let { st ->
+                conflictSection(st.conflicts, state.diffs, state.diffLoading, onEvent)
+                changeSection(
+                    keyPrefix = "changes",
+                    titleRes = R.string.git_section_changes,
+                    changes = st.unstaged.filter { it.unstaged != GitWorkingState.UNTRACKED && !it.isConflict() } + st.untracked,
+                    headerActionLabelRes = R.string.git_stage_all,
+                    isStagedSection = false,
+                    state = state,
+                    onHeaderAction = { onEvent(GitEvent.StageAll) },
+                    onEvent = onEvent,
+                )
+                changeSection(
+                    keyPrefix = "staged",
+                    titleRes = R.string.git_section_staged,
+                    changes = st.staged.filterNot { it.isConflict() },
+                    headerActionLabelRes = R.string.git_unstage_all,
+                    isStagedSection = true,
+                    state = state,
+                    onHeaderAction = { onEvent(GitEvent.UnstageAll) },
+                    onEvent = onEvent,
+                )
+            }
         }
     }
 }

@@ -12,6 +12,7 @@
     <string name="permission_button">Grant access</string>
     <string name="permission_hint">This opens system settings. Turn on Allow access to manage all files, then come back.</string>
     <string name="workspace_title">Workspace</string>
+    <string name="workspace_tablet_empty_hint">Select a file from the explorer on the left to start editing</string>
 
     <!-- Startup onboarding: storage / notifications stepper -->
     <string name="startup_onboarding_back">Back</string>
@@ -448,6 +449,7 @@
     <string name="git_history_mode_author">Author</string>
     <string name="git_history_mode_hash">Hash</string>
     <string name="git_history_empty">No commits found.</string>
+    <string name="git_history_select_commit">Select a commit to view details</string>
 
     <!-- Git background work -->
     <string name="git_work_channel">Git in the background</string>

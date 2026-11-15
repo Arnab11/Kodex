@@ -1,5 +1,9 @@
 package com.invictus.kodex.feature.home
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import com.invictus.kodex.ui.adaptive.isExpandedLayout
+import com.invictus.kodex.ui.adaptive.isTabletLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -71,6 +75,9 @@ fun AllProjectsScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     val sort = ProjectSort.entries[sortIndex]
     val openProject = rememberProjectOpener(onProjectOpened = onProjectOpened, fileTreeViewModel = fileTreeViewModel)
+    val isTablet = isTabletLayout()
+    val isExpanded = isExpandedLayout()
+    val columns = if (isExpanded) 3 else if (isTablet) 2 else 1
     val snackbarHostState = remember { SnackbarHostState() }
     val copyPath = rememberCopyPath(snackbarHostState)
     val context = LocalContext.current
@@ -167,6 +174,7 @@ fun AllProjectsScreen(
                     }
                 }
             }
+
             if (shown.isEmpty()) {
                 item(key = "empty") {
                     Text(
@@ -175,6 +183,36 @@ fun AllProjectsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                     )
+                }
+            } else if (columns > 1) {
+                val chunked = shown.chunked(columns)
+                items(items = chunked, key = { chunk -> "row:" + chunk.joinToString { it.file.path } }) { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (item in rowItems) {
+                            Box(Modifier.weight(1f)) {
+                                ProjectCardRow(
+                                    item = item,
+                                    onOpen = { openProject(item.file) },
+                                    onRemove = { projectsViewModel.onEvent(ProjectsEvent.RemoveRecent(item.file.path)) },
+                                    onTogglePin = { projectsViewModel.onEvent(ProjectsEvent.TogglePin(item.file.path, !item.pinned)) },
+                                    onRename = { projectsViewModel.onEvent(ProjectsEvent.StartRename(item.file)) },
+                                    onDelete = { projectsViewModel.onEvent(ProjectsEvent.StartDelete(item.file)) },
+                                    onInfo = { projectsViewModel.onEvent(ProjectsEvent.ShowInfo(item.file)) },
+                                    onCopyPath = { copyPath(item.file) },
+                                    onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(item.file)) },
+                                    isBackingUp = item.file.path in state.backingUp,
+                                )
+                            }
+                        }
+                        // Fill remainder if row is not full
+                        val missing = columns - rowItems.size
+                        repeat(missing) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
             } else {
                 items(items = shown, key = { "r:" + it.file.path }) { item ->

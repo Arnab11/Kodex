@@ -50,6 +50,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -132,6 +134,13 @@ class GitHubToolsController(
                 }
             }
         }
+        // The commit of a build comes from its artifact. The first refresh can run before the artifacts are
+        // loaded (the commit is then unknown and an installed app reads as "Update"), so redo it when they arrive.
+        scope.launch {
+            _state.map { it.artifacts }.distinctUntilChanged().collect { list ->
+                if (list.isNotEmpty()) withContext(Dispatchers.IO) { refreshDownloadedNow() }
+            }
+        }
         // Retention (last 3 APKs + 24 h) and stale temp files; then show what is kept.
         scope.launch(Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
     }
@@ -146,7 +155,14 @@ class GitHubToolsController(
 
     // ---- downloaded APKs (kept on disk) --------------------------------------------------
 
-    private fun refreshDownloadedNow() {
+    /**
+     * Refreshes can start from several places at once (init, a finished download, resume, an install result).
+     * They are serialised: otherwise a refresh that listed the folder BEFORE a download finished could write
+     * its older list last, and the card would offer Download again for a file that is already on disk.
+     */
+    private val downloadedLock = Any()
+
+    private fun refreshDownloadedNow() = synchronized(downloadedLock) {
         val list = downloader.listCached().map { DownloadedApk(it.artifactId, it.label, it.file, it.sizeBytes, it.modifiedAt) }
         val artifacts = _state.value.artifacts
         val info = list.associate { d ->

@@ -111,6 +111,23 @@ fun SettingsBehaviorScreen(
                 )
             }
 
+            SettingsSectionHeader(stringResource(R.string.settings_group_terminal))
+            SettingsSectionCard {
+                SwitchSettingRow(
+                    title = stringResource(R.string.termux_enable),
+                    subtitle = stringResource(R.string.termux_enable_desc),
+                    checked = terminalEnabled.value,
+                    onCheckedChange = { TermuxSetupPrefs.setEnabled(appContext, it) },
+                )
+                SettingsDivider()
+                ClickableSettingRow(
+                    title = stringResource(R.string.menu_termux_setup),
+                    subtitle = stringResource(R.string.termux_setup_row_desc),
+                    chevron = XIcons.ChevronRight,
+                    onClick = onOpenTermuxSetup,
+                )
+            }
+
             SettingsSectionHeader(stringResource(R.string.settings_group_search))
             SettingsSectionCard {
                 SwitchSettingRow(
@@ -180,23 +197,6 @@ fun SettingsBehaviorScreen(
                         Text(stringResource(R.string.settings_search_clear_recent))
                     }
                 }
-            }
-
-            SettingsSectionHeader(stringResource(R.string.settings_group_terminal))
-            SettingsSectionCard {
-                SwitchSettingRow(
-                    title = stringResource(R.string.termux_enable),
-                    subtitle = stringResource(R.string.termux_enable_desc),
-                    checked = terminalEnabled.value,
-                    onCheckedChange = { TermuxSetupPrefs.setEnabled(appContext, it) },
-                )
-                SettingsDivider()
-                ClickableSettingRow(
-                    title = stringResource(R.string.menu_termux_setup),
-                    subtitle = stringResource(R.string.termux_setup_row_desc),
-                    chevron = XIcons.ChevronRight,
-                    onClick = onOpenTermuxSetup,
-                )
             }
         }
     }

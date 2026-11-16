@@ -132,7 +132,11 @@ fun GitScreen(
         )
     }
     state.error?.let { details ->
-        GitErrorDialog(details = details, onDismiss = { viewModel.onEvent(GitEvent.DismissError) })
+        GitErrorDialog(
+            details = details,
+            onDismiss = { viewModel.onEvent(GitEvent.DismissError) },
+            onSkip = if (state.canSkipRemove) ({ viewModel.onEvent(GitEvent.SkipRemove) }) else null,
+        )
     }
     state.discardConfirm?.let { target ->
         AlertDialog(

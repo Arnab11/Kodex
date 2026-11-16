@@ -18,6 +18,8 @@ sealed interface GitEvent {
     /** Pasted `git rm` / `rm` that deletes files: confirm (or cancel) before anything is removed. */
     data object ConfirmRemove : GitEvent
     data object DismissRemove : GitEvent
+    /** The pasted `git rm` step failed: skip it and run the rest of the snippet (add / commit / push). */
+    data object SkipRemove : GitEvent
     data class CommitMessageChange(val text: String) : GitEvent
     /** Paste button: plain text is appended; a git add/commit/push snippet runs straight away. */
     data class PasteCommitText(val text: String) : GitEvent

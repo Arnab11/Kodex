@@ -143,6 +143,8 @@ class GitViewModel(
         val discardConfirm: DiscardConfirmState? = null,
         /** Pasted `git rm` waiting for the "delete these files?" confirmation. */
         val removeConfirm: RemoveConfirmState? = null,
+        /** The error dialog belongs to a failed pasted `git rm` and offers "Skip". */
+        val canSkipRemove: Boolean = false,
         // Reset (soft/mixed/hard)
         val resetSheetOpen: Boolean = false,
         val resetCommits: List<GitCommitSummary> = emptyList(),
@@ -301,7 +303,11 @@ class GitViewModel(
             GitEvent.DismissIdentity -> _uiState.update { it.copy(identity = null) }
             is GitEvent.SaveToken -> saveToken(event.host, event.username, event.token)
             GitEvent.DismissToken -> _uiState.update { it.copy(tokenDialog = null) }
-            GitEvent.DismissError -> _uiState.update { it.copy(error = null) }
+            GitEvent.DismissError -> {
+                failedRemoveScript = null
+                _uiState.update { it.copy(error = null, canSkipRemove = false) }
+            }
+            GitEvent.SkipRemove -> skipRemove()
             // M10: merge + conflicts
             GitEvent.OpenMerge -> openMergeDialog()
             GitEvent.DismissMerge ->
@@ -746,7 +752,10 @@ class GitViewModel(
         if (_uiState.value.committing) return
         viewModelScope.launch(io) {
             when (val r = session.planRemove(script.removals)) {
-                is GitResult.Err -> _uiState.update { it.copy(error = r.error) }
+                is GitResult.Err -> {
+                    failedRemoveScript = script
+                    _uiState.update { it.copy(error = r.error, canSkipRemove = true) }
+                }
                 is GitResult.Ok -> {
                     val plan = r.value
                     if (plan.needsConfirm) {
@@ -760,6 +769,16 @@ class GitViewModel(
                 }
             }
         }
+    }
+
+    /** Script whose `git rm` step could not be resolved; kept so "Skip" can run the remaining steps. */
+    private var failedRemoveScript: GitCommandScript? = null
+
+    private fun skipRemove() {
+        val script = failedRemoveScript ?: return
+        failedRemoveScript = null
+        _uiState.update { it.copy(error = null, canSkipRemove = false) }
+        runGitScript(script.copy(removals = emptyList(), addFirst = false), null)
     }
 
     private fun confirmRemove() {

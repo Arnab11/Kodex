@@ -360,6 +360,7 @@
     <string name="git_username_hint">Username</string>
     <string name="git_token_save">Save &amp; retry</string>
     <string name="git_error_copy">Copy details</string>
+    <string name="git_error_skip">Skip</string>
     <string name="git_error_auth_hint">Authentication failed — the token may be wrong or expired.</string>
     <string name="home_clone">Clone repository</string>
     <string name="clone_title">Clone repository</string>

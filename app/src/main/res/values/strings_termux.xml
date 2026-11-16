@@ -36,7 +36,7 @@ Then tap Terminal again.</string>
     <string name="termux_chk_overlay">Termux may display over other apps</string>
     <string name="termux_allow">Allow</string>
     <string name="termux_copy_open_cmd">Copy command &amp; open Termux</string>
-    <string name="termux_external_hint">Paste the copied command in Termux and press Enter, then come back. If it is still not detected, close Termux completely and try again.</string>
+    <string name="termux_external_hint">Not checked yet. Paste the copied command in Termux and press Enter, then come back (it checks once). If it still fails, close Termux completely and tap Check again. Each failed check makes Termux show an error notification, so Kodex only checks when you ask.</string>
     <string name="termux_storage_hint">Asked for during the install step below.</string>
     <string name="termux_overlay_hint">Android cannot tell Kodex whether this is on, so it turns green after you open the settings page.</string>
     <string name="termux_open_settings">Open settings</string>

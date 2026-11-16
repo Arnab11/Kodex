@@ -129,6 +129,7 @@ fun TermuxSetupScreen(
                     onAction = {
                         context.getSystemService(ClipboardManager::class.java)
                             .setPrimaryClip(ClipData.newPlainText("termux-bootstrap", TermuxSetupModel.BOOTSTRAP_COMMAND))
+                        viewModel.arm()
                         TermuxLauncher.launch(context)
                     },
                     actionEnabled = viewModel.permissionGranted,
@@ -153,7 +154,7 @@ fun TermuxSetupScreen(
                     hint = stringResource(R.string.termux_overlay_hint),
                 )
             }
-            TextButton(onClick = { viewModel.refresh() }, modifier = Modifier.padding(start = 8.dp)) {
+            TextButton(onClick = { viewModel.refresh(userInitiated = true) }, modifier = Modifier.padding(start = 8.dp)) {
                 Text(stringResource(R.string.termux_recheck))
             }
 
@@ -267,7 +268,7 @@ fun TermuxSetupScreen(
                     }
                 }
                 Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { viewModel.refresh() }) { Text(stringResource(R.string.termux_verify)) }
+                    OutlinedButton(onClick = { viewModel.refresh(userInitiated = true) }) { Text(stringResource(R.string.termux_verify)) }
                     Button(onClick = { viewModel.finish(); onBack() }) { Text(stringResource(R.string.termux_finish)) }
                 }
             }

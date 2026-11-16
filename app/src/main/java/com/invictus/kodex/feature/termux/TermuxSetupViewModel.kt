@@ -51,14 +51,31 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
         TermuxSetupPrefs.setOverlayAcknowledged(ctx, true)
     }
 
-    /** Re-reads everything; called on every resume, so coming back from Termux updates the checks. */
-    fun refresh() {
+    /** The user is about to paste the setup command in Termux: the next resume may probe once. */
+    private var armed = false
+
+    fun arm() {
+        armed = true
+    }
+
+    /**
+     * Re-reads everything. Asking Termux (the probe) is the only way to learn whether it accepts
+     * Kodex, but a Termux that has not enabled external apps shows an error notification for every try. So the probe runs
+     * automatically only when it is known to work, after the user pasted the command, or after an
+     * install; otherwise only on an explicit tap ([userInitiated]).
+     */
+    fun refresh(userInitiated: Boolean = false) {
         termuxInstalled = TermuxLauncher.isInstalled(ctx)
         permissionGranted = termuxInstalled && TermuxLauncher.hasPermission(ctx)
         if (!permissionGranted) {
             probe = null
             return
         }
+        if (!(userInitiated || armed || installStarted || TermuxSetupPrefs.externalOk(ctx))) {
+            probe = null
+            return
+        }
+        armed = false
         job?.cancel()
         job = viewModelScope.launch {
             checking = true
@@ -70,6 +87,7 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
                 TermuxProbe(externalAllowed = false, storageOk = false, mirrorHost = null, installed = emptySet())
             }
             probe = parsed
+            TermuxSetupPrefs.setExternalOk(ctx, parsed.externalAllowed)
             if (installStarted && parsed.externalAllowed) {
                 verify = TermuxSetupModel.allPackages(selection).map { it to (it in parsed.installed) }
             }

@@ -196,7 +196,7 @@ fun PrivateRepoDialog(
 }
 
 @Composable
-fun GitErrorDialog(details: GitErrorDetails, onDismiss: () -> Unit) {
+fun GitErrorDialog(details: GitErrorDetails, onDismiss: () -> Unit, onSkip: (() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -228,8 +228,13 @@ fun GitErrorDialog(details: GitErrorDetails, onDismiss: () -> Unit) {
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_close_dialog))
+            Row {
+                if (onSkip != null) {
+                    TextButton(onClick = onSkip) { Text(stringResource(R.string.git_error_skip)) }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_close_dialog))
+                }
             }
         },
     )

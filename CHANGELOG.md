@@ -15,10 +15,17 @@ pick the matching section as the GitHub Release notes.
 #### 💻 Terminal (via Termux)
 - 🔌 **Optional terminal, off by default** — switch it on in **Settings → Workspace → Terminal (Termux)**. Nothing is bundled in the APK (+0 MB): Kodex hands off to the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings a real terminal and packages such as git, ssh, python, node and clang.
 - 🖥️ **Terminal** — Workspace ⋮ → *Terminal* opens a Termux session already inside the project folder.
-- ▶️ **Run command…** — Workspace ⋮ runs one command in the project folder in the background and shows its output and exit code inside Kodex. The last commands are kept as chips; output can be copied. Output arrives when the command finishes (no live stream, no keyboard input) — use *Terminal* for interactive programs.
 - 🏃 **Run file** — a ▶ button in the editor saves the file and runs it in a visible Termux session in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`. If the interpreter is missing it says which package to install.
 - 🔗 **`kodex` command in Termux** — `kodex file.py` opens a file in the editor, `kodex .` or `kodex folder` opens that folder as the project. It is installed automatically whenever Kodex opens a Termux session.
-- 🧭 **Termux setup screen** (*Settings → Workspace → Termux setup*) — live connection checks, a preset dropdown (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, a mirror dropdown, git name and email, and switches for storage access and upgrading first. The install runs in a visible Termux session and Kodex verifies the result afterwards. It never pops up on its own: if Termux is not ready, a snackbar offers a *Setup* button.
+- 🧭 **Termux setup screen** (*Settings → Workspace → Termux setup*) — live connection checks, a preset dropdown (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, a mirror dropdown, git name and email, and switches for storage access and upgrading first. The install runs in a visible Termux session and Kodex verifies the result afterwards. It never pops up on its own: if Termux is not ready, a snackbar offers a *Setup* button. Kodex only probes Termux when you ask (or after you pasted the setup command), because every call to a Termux that blocks external apps makes it show an error notification.
+
+### 🐞 Fixed
+- ⏭️ **Git: a failed pasted `git rm` can be skipped** — when a pasted snippet's `git rm` cannot run (for example the file is already deleted), the error dialog now has a **Skip** button that drops that step and carries on with the rest (add, commit, push).
+- 📲 **GitHub: Install / Update / Open is worked out again once the build list has loaded.** Before, an app already on the latest commit could keep showing *Update* because the first check ran before the commits were known.
+- 📥 **GitHub: a just-downloaded APK no longer offers *Download* again.** The list of downloaded files could be overwritten by an older, slower refresh; refreshes now run one at a time.
+
+### 🔄 Changed
+- 🧭 In **Settings → Workspace**, the *Terminal (Termux)* section now sits above *Search*.
 
 ### 📝 Notes
 - Needs the Termux app and a one-time step in it (`allow-external-apps`), which Kodex cannot switch on itself; the setup screen copies the command for you.

@@ -157,6 +157,14 @@ object TermuxSetupPrefs {
         enabled(context).value = value
     }
 
+    /**
+     * Whether Termux has answered a Kodex call before. Every call to a Termux that has not enabled
+     * external apps makes Termux post an error notification, so Kodex only calls it on its own
+     * (probe, `kodex` CLI install) once this is known to be true.
+     */
+    fun externalOk(context: Context): Boolean = prefs(context).getBoolean("externalOk", false)
+    fun setExternalOk(context: Context, v: Boolean) = prefs(context).edit().putBoolean("externalOk", v).apply()
+
     fun isDone(context: Context): Boolean = prefs(context).getBoolean("done", false)
     fun setDone(context: Context, done: Boolean) = prefs(context).edit().putBoolean("done", done).apply()
 

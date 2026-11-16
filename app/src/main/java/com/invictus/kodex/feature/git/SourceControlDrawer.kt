@@ -141,7 +141,11 @@ fun SourceControlDrawerSheet(
         )
     }
     state.error?.let {
-        GitErrorDialog(details = it, onDismiss = { onEvent(GitEvent.DismissError) })
+        GitErrorDialog(
+            details = it,
+            onDismiss = { onEvent(GitEvent.DismissError) },
+            onSkip = if (state.canSkipRemove) ({ onEvent(GitEvent.SkipRemove) }) else null,
+        )
     }
     GitMergeDialogs(state, onEvent)
     GitRebaseDialogs(state, onEvent)

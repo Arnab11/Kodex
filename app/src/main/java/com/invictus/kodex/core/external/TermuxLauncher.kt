@@ -48,7 +48,8 @@ object TermuxLauncher {
 
     /** Starts a login shell in [dir] and brings Termux to the front. False when the call was refused. */
     fun openSession(context: Context, dir: File): Boolean {
-        installCli(context)
+        // A background call to a Termux that blocks external apps would add a second error notification.
+        if (TermuxSetupPrefs.externalOk(context)) installCli(context)
         return try {
             val intent = baseIntent()
                 .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-l"))

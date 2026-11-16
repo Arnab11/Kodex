@@ -30,7 +30,8 @@ pick the matching section as the GitHub Release notes.
 - 🧭 In **Settings → Workspace**, the *Terminal (Termux)* section now sits above *Search*.
 
 ### 📝 Notes
-- Needs the Termux app and a one-time step in it (`allow-external-apps`), which Kodex cannot switch on itself; the setup screen copies the command for you.
+- Needs the Termux app (F-Droid / GitHub build) and a one-time step in it (`allow-external-apps`), which Kodex cannot switch on itself; the setup screen copies the command for you.
+- Kodex only calls Termux when you ask (or after you pasted the setup command): every call to a Termux that blocks external apps makes it show an error notification.
 - New permission: `com.termux.permission.RUN_COMMAND`.
 
 ## [1.3.0] - 2026-11-11

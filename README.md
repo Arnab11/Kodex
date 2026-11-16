@@ -7,7 +7,7 @@
 <p align="center">
   <b>A native Android code editor with real Git — fast editing, source control and previews, with no bundled toolchain.</b>
   <br>
-  <i>No SDK manager, no terminal, no Ubuntu rootfs — just your project folder, a fast editor and Git.</i>
+  <i>No SDK manager, no built-in terminal, no Ubuntu rootfs — just your project folder, a fast editor and Git. Need a shell? Hand off to Termux, optionally.</i>
 </p>
 
 > [!NOTE]
@@ -58,7 +58,8 @@
 
 Closed-source editors cover this niche already. Kodex is an open, from-scratch take on the part that
 matters on a phone: **editing code and managing it with Git**. Building and running is deliberately
-left to GitHub Actions or a PC — that is a different (and much heavier) problem.
+left to GitHub Actions, a PC or — if you want a shell on the phone — the separate **Termux** app, which Kodex can
+hand your project folder to (optional, off by default, nothing bundled). That is a different (and much heavier) problem.
 
 **What's new in 1.3.0** — a **Tools hub** (keystore generator, file splitter, image tracer), an AI that can **read and operate Git with your approval**, a plain-language **Reflog** screen, **hunk-only diff editing**, and **push / pull / fetch that keep running** when you leave the app. Full list in the [changelog](CHANGELOG.md).
 
@@ -200,6 +201,25 @@ turning it off hides every AI entry point and disables every AI route.
 </details>
 
 <details>
+<summary><b>💻 Terminal via Termux (optional)</b></summary>
+
+<a id="-terminal"></a>
+
+Off by default. Turn it on in **Settings → Workspace → Terminal (Termux)**. Nothing is bundled in the APK (+0 MB): Kodex hands off to the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings a real terminal and packages such as git, ssh, python, node and clang.
+
+| Feature | Description |
+|---|---|
+| **Terminal** | Workspace ⋮ → *Terminal* opens a Termux session already inside the project folder |
+| **Run** | Workspace ⋮ → *Run* runs one command in the project folder and shows its output and exit code inside Kodex. Project-aware suggestions (Gradle, npm, pip, cargo, go, make, git…), your last 10 commands, elapsed time, copy / share / clear, wrap-lines switch, and **Run in Termux** for programs that need the keyboard. Output arrives when the command finishes (no live stream) |
+| **Run file** | A ▶ button in the editor saves the file and runs it in a visible Termux session in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`; says which package to install if the interpreter is missing |
+| **`kodex` command** | In Termux, `kodex file.py` opens a file in the editor and `kodex .` / `kodex folder` opens that folder as the project; installed automatically when Kodex opens a Termux session |
+| **Setup screen** | *Settings → Workspace → Termux setup*: connection checks, preset (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, mirror, git name / email, and an install that runs in a visible Termux session |
+
+**One-time step:** Termux only accepts commands from other apps after `allow-external-apps=true` is set in `~/.termux/termux.properties`. Kodex cannot do that for you; the setup screen copies the command to paste. Kodex only calls Termux when you ask, because every call to a Termux that blocks external apps makes it show an error notification.
+
+</details>
+
+<details>
 <summary><b>🎨 Themes, settings & diagnostics</b></summary>
 
 | Feature | Description |
@@ -245,6 +265,7 @@ app/src/main/java/com/invictus/kodex/
  │   ├─ preview/     # preview helpers
  │   ├─ search/      # fuzzy file search, code search, search history
  │   ├─ project/     # recents + pins repository, ZIP backup
+ │   ├─ external/    # Termux hand-off: launcher, Run runner, `kodex` command, setup model
 │   ├─ archive/     # zip / split / extract helpers
 │   ├─ tracer/      # native image tracer bindings + session
  │   ├─ security/    # per-remote token vault
@@ -259,6 +280,7 @@ app/src/main/java/com/invictus/kodex/
  │   ├─ editor/      # tabs, editor screen, find/replace, symbol bar
  │   ├─ git/         # status, commit, branches, diff, history, stash, reflog, remotes, onboarding
  │   ├─ tools/       # keystore, file splitter, image tracer
+ │   ├─ termux/      # Termux setup screen (checks, presets, packages, mirror)
  │   ├─ archive/     # archive extract screens
  │   ├─ preview/     # Markdown / HTML / SVG / image / video
  │   ├─ search/      # file search overlay, code search screen
@@ -396,13 +418,14 @@ Run workflow** and typing the tag name, without pushing a tag first.
 - `POST_NOTIFICATIONS` — clone and sync progress, GitHub build/download status and AI replies
 - `REQUEST_INSTALL_PACKAGES` — install APKs you download from your GitHub builds (only after you tap *Install*)
 - `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` — keep long GitHub jobs and AI replies running while the app is in the background
+- `com.termux.permission.RUN_COMMAND` — optional: lets Kodex ask the Termux app to open a session or run a command, only after you enable the terminal and allow it
 
 ---
 
 ## 🚫 Out of scope
 
-On-device build/run, SDK/Gradle/JDK management, a terminal, SSH auth, LSP servers, MCP servers,
-a plugin system and a real Compose/XML/Flutter layout preview.
+On-device build/run, SDK/Gradle/JDK management, a built-in terminal (an optional hand-off to Termux exists), SSH auth, LSP servers,
+MCP servers, a plugin system and a real Compose/XML/Flutter layout preview.
 
 ---
 

@@ -165,9 +165,6 @@ object TermuxSetupPrefs {
     fun externalOk(context: Context): Boolean = prefs(context).getBoolean("externalOk", false)
     fun setExternalOk(context: Context, v: Boolean) = prefs(context).edit().putBoolean("externalOk", v).apply()
 
-    fun isDone(context: Context): Boolean = prefs(context).getBoolean("done", false)
-    fun setDone(context: Context, done: Boolean) = prefs(context).edit().putBoolean("done", done).apply()
-
     fun load(context: Context): SetupSelection {
         val p = prefs(context)
         val preset = TermuxSetupModel.presets.first { it.id == TermuxSetupModel.DEFAULT_PRESET }

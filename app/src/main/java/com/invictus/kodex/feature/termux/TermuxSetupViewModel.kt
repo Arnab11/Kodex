@@ -103,9 +103,6 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
         return ok
     }
 
-    /** Setup finished: remember it and switch the terminal features on. */
-    fun finish() {
-        TermuxSetupPrefs.setDone(ctx, true)
-        TermuxSetupPrefs.setEnabled(ctx, true)
-    }
+    /** Setup finished: switch the terminal features on. */
+    fun finish() = TermuxSetupPrefs.setEnabled(ctx, true)
 }

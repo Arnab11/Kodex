@@ -261,6 +261,15 @@ fun WorkspaceScreen(
         }
     }
     val onOpenTerminal: () -> Unit = { withTermux(openTermux) }
+    var showRunCommand by remember { mutableStateOf(false) }
+    val onRunCommand: () -> Unit = { withTermux { showRunCommand = true } }
+    if (showRunCommand) {
+        TermuxRunDialog(
+            dir = state.root,
+            onOpenTerminal = openTermux,
+            onDismiss = { showRunCommand = false },
+        )
+    }
 
     // `kodex <folder>` in Termux asks for this folder to become the project.
     val pendingProjectDir by ExternalProjectOpen.pending.collectAsStateWithLifecycle()
@@ -291,6 +300,7 @@ fun WorkspaceScreen(
                     onOpenGitHub = { onOpenGitHub(state.root) },
                     onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
                     onOpenTerminal = onOpenTerminal,
+                    onRunCommand = onRunCommand,
                     terminalEnabled = TermuxSetupPrefs.enabled(context).value,
                     onOpenSettings = onOpenSettings,
                     onCollapseSidebar = onCollapse,
@@ -451,6 +461,7 @@ private fun WorkspaceTopBar(
     onOpenGitHub: () -> Unit = {},
     onOpenAi: (() -> Unit)? = null,
     onOpenTerminal: () -> Unit = {},
+    onRunCommand: () -> Unit = {},
     terminalEnabled: Boolean = false,
     onOpenSettings: () -> Unit = {},
     onCollapseSidebar: (() -> Unit)? = null,
@@ -539,6 +550,14 @@ private fun WorkspaceTopBar(
                             onClick = {
                                 menuOpen = false
                                 onOpenTerminal()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_run_command)) },
+                            leadingIcon = { Icon(XIcons.PlayArrow, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onRunCommand()
                             },
                         )
                     }

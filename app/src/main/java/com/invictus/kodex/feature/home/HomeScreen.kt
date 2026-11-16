@@ -754,7 +754,7 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float, ti
 
     fun ease(x: Float) = x * x * (3f - 2f * x)
 
-    // Soft glow behind the stack and a ground shadow under it.
+    // Soft glow behind the stack (no ground shadow: it read as a dark smudge under the panels).
     val stackC = Offset(w * 0.72f, h * 0.52f)
     drawCircle(
         brush = Brush.radialGradient(
@@ -762,15 +762,6 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float, ti
             center = stackC, radius = w * 0.30f,
         ),
         radius = w * 0.30f, center = stackC,
-    )
-    val shadowC = Offset(w * 0.72f, h * 0.93f)
-    drawOval(
-        brush = Brush.radialGradient(
-            listOf(Color(0x77000010).copy(alpha = 0.45f * intro), Color.Transparent),
-            center = shadowC, radius = w * 0.20f,
-        ),
-        topLeft = Offset(shadowC.x - w * 0.20f, shadowC.y - h * 0.045f),
-        size = Size(w * 0.40f, h * 0.09f),
     )
 
     // Three stacked glass panels, each bobbing on its own phase and rising in on start.

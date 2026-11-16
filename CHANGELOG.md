@@ -15,6 +15,7 @@ pick the matching section as the GitHub Release notes.
 #### 💻 Terminal (via Termux)
 - 🔌 **Optional terminal, off by default** — switch it on in **Settings → Workspace → Terminal (Termux)**. Nothing is bundled in the APK (+0 MB): Kodex hands off to the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings a real terminal and packages such as git, ssh, python, node and clang.
 - 🖥️ **Terminal** — Workspace ⋮ → *Terminal* opens a Termux session already inside the project folder.
+- ▶️ **Run** — Workspace ⋮ → *Run* runs one command in the project folder in the background and shows its output and exit code inside Kodex. Suggested commands for the project (Gradle, npm, pip, cargo, go, make, git…) and your last 10 commands are one tap away, with elapsed time, exit code, copy / share / clear and a wrap-lines switch. Output arrives when the command finishes (no live stream) — **Run in Termux** runs the same command in a visible session for programs that need the keyboard.
 - 🏃 **Run file** — a ▶ button in the editor saves the file and runs it in a visible Termux session in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`. If the interpreter is missing it says which package to install.
 - 🔗 **`kodex` command in Termux** — `kodex file.py` opens a file in the editor, `kodex .` or `kodex folder` opens that folder as the project. It is installed automatically whenever Kodex opens a Termux session.
 - 🧭 **Termux setup screen** (*Settings → Workspace → Termux setup*) — live connection checks, a preset dropdown (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, a mirror dropdown, git name and email, and switches for storage access and upgrading first. The install runs in a visible Termux session and Kodex verifies the result afterwards. It never pops up on its own: if Termux is not ready, a snackbar offers a *Setup* button. Kodex only probes Termux when you ask (or after you pasted the setup command), because every call to a Termux that blocks external apps makes it show an error notification.
@@ -25,6 +26,7 @@ pick the matching section as the GitHub Release notes.
 - 📥 **GitHub: a just-downloaded APK no longer offers *Download* again.** The list of downloaded files could be overwritten by an older, slower refresh; refreshes now run one at a time.
 
 ### 🔄 Changed
+- 🖼️ The welcome banner on the home screen no longer draws the dark oval "shadow" under the glass panels.
 - 🧭 In **Settings → Workspace**, the *Terminal (Termux)* section now sits above *Search*.
 
 ### 📝 Notes

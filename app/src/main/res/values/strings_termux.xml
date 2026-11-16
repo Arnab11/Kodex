@@ -3,31 +3,9 @@
     <string name="menu_terminal">Terminal</string>
     <string name="termux_opening_hint">Opening Termux in this project…</string>
     <string name="termux_setup_help">Setup help</string>
-    <string name="termux_missing_title">Termux not installed</string>
-    <string name="termux_missing_body">The terminal runs in Termux, a separate app with git, ssh, python, node and more. Install it from F-Droid or GitHub (the Play Store version is outdated), then tap Terminal again.</string>
     <string name="termux_get">Get Termux</string>
-    <string name="termux_setup_title">Set up Termux</string>
-    <string name="termux_setup_steps">One-time setup:
-
-1. Tap \"Copy &amp; open Termux\", long-press in Termux, paste, press Enter. It enables external apps, asks for storage access (allow it) and installs git, openssh, curl, nano, python and nodejs.
-2. Allow \"Run commands in Termux environment\" for Kodex (App info → Permissions) if you denied it.
-3. In Android settings, allow Termux \"Display over other apps\".
-
-Then tap Terminal again.</string>
-    <string name="termux_copy_and_open">Copy &amp; open Termux</string>
-    <string name="menu_run_command">Run command…</string>
-    <string name="termux_run_title">Run in Termux</string>
-    <string name="termux_run_hint">Command (runs in the project folder)</string>
-    <string name="termux_run_note">Output appears when the command finishes. No keyboard input: use Terminal for interactive programs.</string>
-    <string name="termux_run">Run</string>
-    <string name="termux_stop">Stop waiting</string>
-    <string name="termux_exit_code">Exit code %1$d</string>
-    <string name="termux_no_output">(no output)</string>
-    <string name="termux_copy_output">Copy output</string>
-    <string name="termux_open_terminal">Terminal</string>
     <string name="termux_screen_title">Termux setup</string>
     <string name="termux_screen_intro">Kodex opens its terminal in Termux. Set it up once here: check the connection, pick what to install, and Kodex runs it for you in Termux.</string>
-    <string name="termux_skip">Skip</string>
     <string name="termux_sec_connection">1 · Connection</string>
     <string name="termux_chk_installed">Termux is installed</string>
     <string name="termux_chk_permission">Kodex may run commands in Termux</string>
@@ -67,9 +45,30 @@ Then tap Terminal again.</string>
     <string name="menu_termux_setup">Termux setup</string>
     <string name="termux_run_file">Run file in Termux</string>
     <string name="termux_enable">Enable terminal</string>
-    <string name="termux_enable_desc">Shows Terminal, Run command and the Run file button. Needs Termux.</string>
+    <string name="termux_enable_desc">Shows Terminal and Run in the Workspace menu, and the Run file button in the editor. Needs Termux.</string>
     <string name="termux_not_ready">Termux is not ready.</string>
     <string name="termux_setup_action">Setup</string>
     <string name="settings_group_terminal">Terminal (Termux)</string>
     <string name="termux_setup_row_desc">Connection checks, packages, mirror, git identity</string>
+    <string name="menu_run_command">Run</string>
+    <string name="termux_run_title">Run</string>
+    <string name="termux_run_hint">Command (runs in the project folder)</string>
+    <string name="termux_run_note">Output appears when the command finishes. No keyboard input: use Terminal for interactive programs.</string>
+    <string name="termux_run">Run</string>
+    <string name="termux_stop">Stop waiting</string>
+    <string name="termux_exit_code">Exit code %1$d</string>
+    <string name="termux_no_output">(no output)</string>
+    <string name="termux_copy_output">Copy output</string>
+    <string name="termux_open_terminal">Terminal</string>
+    <string name="termux_run_folder">Runs in</string>
+    <string name="termux_run_suggested">Suggested</string>
+    <string name="termux_run_recent">Recent</string>
+    <string name="termux_run_clear_history">Clear history</string>
+    <string name="termux_run_interactive">Run in Termux</string>
+    <string name="termux_run_wrap">Wrap lines</string>
+    <string name="termux_run_share">Share</string>
+    <string name="termux_run_clear">Clear</string>
+    <string name="termux_run_truncated">Showing the last %1$d characters.</string>
+    <string name="termux_run_running">Running… %1$s s</string>
+    <string name="termux_run_took">%1$s s</string>
 </resources>

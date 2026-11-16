@@ -21,21 +21,6 @@ object TermuxLauncher {
     const val PERMISSION = "com.termux.permission.RUN_COMMAND"
     const val RELEASES_URL = "https://github.com/termux/termux-app/releases"
 
-    /** Packages the setup installs. Edit this list to change what "Copy & open Termux" sets up. */
-    private const val SETUP_PACKAGES = "git openssh curl nano python nodejs"
-
-    /**
-     * Pasted into Termux once (safe to run again): enables external apps (needed for RUN_COMMAND,
-     * which Kodex cannot switch on itself), asks for storage access, then updates and installs tools.
-     * The mirror is left as the user has it: termux-change-repo is interactive and a fresh Termux
-     * already ships with a working default mirror.
-     */
-    const val SETUP_COMMAND =
-        "mkdir -p ~/.termux && (grep -qs '^allow-external-apps=true' ~/.termux/termux.properties || " +
-            "echo 'allow-external-apps=true' >> ~/.termux/termux.properties) && " +
-            "termux-reload-settings && termux-setup-storage; " +
-            "pkg update -y && pkg install -y $SETUP_PACKAGES"
-
     private const val ACTION = "com.termux.RUN_COMMAND"
     private const val SERVICE = "com.termux.app.RunCommandService"
     private const val BASH = "/data/data/com.termux/files/usr/bin/bash"
@@ -97,6 +82,21 @@ object TermuxLauncher {
     fun runFile(context: Context, file: File): Boolean {
         val script = TermuxRunFile.script(file) ?: return false
         return startForeground(context, script, file.parentFile)
+    }
+
+    /**
+     * Runs [command] (may be several lines) in a visible Termux session in [dir], so programs that need
+     * the keyboard work. Shows the exit code and waits for Enter, like Run file.
+     */
+    fun runCommandVisible(context: Context, dir: File, command: String): Boolean {
+        fun sq(s: String) = "'" + s.replace("'", "'\\''") + "'"
+        val script = buildString {
+            appendLine("printf '%s\\n' ${sq("$ " + command.trim())}")
+            appendLine(command.trim())
+            appendLine("code=\$?")
+            appendLine("echo; echo \"[exit \$code] Press Enter to close\"; read -r _")
+        }
+        return startForeground(context, script, dir)
     }
 
     /** Android's "Display over other apps" page for Termux (Termux needs it to open its session). */

@@ -271,6 +271,7 @@ fun KodexNavHost(
                 onOpenCrashLogs = { navController.navigate(Routes.SETTINGS_CRASH_LOGS) },
                 onOpenGitLogs = { navController.navigate(Routes.SETTINGS_GIT_LOGS) },
                 onOpenTerminalSettings = { navController.navigate(Routes.SETTINGS_TERMINAL) { launchSingleTop = true } },
+                onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )
         }
         composable(Routes.SETTINGS_CRASH_LOGS) {

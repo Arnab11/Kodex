@@ -41,7 +41,7 @@ class RemoteSession(
     scrollback: Int,
 ) : TerminalOutput(), TerminalSessionClient {
 
-    enum class State { STARTING, RUNNING, EXITED, FAILED }
+    enum class State { STARTING, RUNNING, RECONNECTING, EXITED, FAILED }
 
     var state by mutableStateOf(State.STARTING)
         private set
@@ -72,45 +72,66 @@ class RemoteSession(
 
     // ---------------------------------------------------------------- connection
 
+    /**
+     * Connects, then keeps the session attached: the shell lives on in Termux when the socket drops (Kodex
+     * frozen, screen off), so a loss is followed by a short reconnect before the tab is declared ended.
+     */
     fun connect(port: Int, token: String, firstInput: String?) {
         thread(name = "kodex-term-r$id", isDaemon = true) {
-            val s = dial(port)
+            var s = dial(port, CONNECT_TIMEOUT_MS)
             if (s == null) {
                 main.post { if (!closed) fail(appContext.getString(R.string.terminal_err_no_helper)) }
                 return@thread
             }
-            try {
-                socket = s
-                synchronized(lock) { out = s.getOutputStream() }
-                writeFrame(T_HELLO, token.toByteArray())
-                sendResize()
-                if (!firstInput.isNullOrEmpty()) write(firstInput)
-                val input = DataInputStream(BufferedInputStream(s.getInputStream()))
-                while (true) {
-                    val type = input.read()
-                    if (type < 0) break
-                    val len = input.readInt()
-                    if (len < 0 || len > MAX_FRAME) break
-                    val payload = ByteArray(len)
-                    input.readFully(payload)
-                    when (type) {
-                        T_DATA -> main.post { onData(payload) }
-                        T_EXIT -> {
-                            val code = if (len >= 4) ByteBuffer.wrap(payload).int else -1
-                            main.post { onExit(code) }
-                            return@thread
-                        }
-                    }
-                }
-                main.post { onLost() }
-            } catch (_: IOException) {
-                main.post { onLost() }
+            var input = firstInput
+            while (!closed) {
+                val ended = serve(s!!, token, input)
+                input = null
+                if (ended || closed) return@thread
+                main.post { markReconnecting() }
+                s = dial(port, RECONNECT_TIMEOUT_MS)
+                if (s == null) break
             }
+            main.post { onLost() }
         }
     }
 
-    private fun dial(port: Int): Socket? {
-        val deadline = SystemClock.elapsedRealtime() + CONNECT_TIMEOUT_MS
+    /** Runs one connection until it ends. True when the shell itself exited (nothing to reconnect to). */
+    private fun serve(s: Socket, token: String, firstInput: String?): Boolean {
+        try {
+            socket = s
+            synchronized(lock) { out = s.getOutputStream() }
+            writeFrame(T_HELLO, token.toByteArray())
+            sendResize()
+            main.post { markConnected() }
+            if (!firstInput.isNullOrEmpty()) write(firstInput)
+            val input = DataInputStream(BufferedInputStream(s.getInputStream()))
+            while (true) {
+                val type = input.read()
+                if (type < 0) return false
+                val len = input.readInt()
+                if (len < 0 || len > MAX_FRAME) return false
+                val payload = ByteArray(len)
+                input.readFully(payload)
+                when (type) {
+                    T_DATA -> main.post { onData(payload) }
+                    T_EXIT -> {
+                        val code = if (len >= 4) ByteBuffer.wrap(payload).int else -1
+                        main.post { onExit(code) }
+                        return true
+                    }
+                }
+            }
+        } catch (_: IOException) {
+            return false
+        } finally {
+            synchronized(lock) { out = null }
+            try { s.close() } catch (_: IOException) {}
+        }
+    }
+
+    private fun dial(port: Int, timeoutMs: Long): Socket? {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (!closed && SystemClock.elapsedRealtime() < deadline) {
             val s = Socket()
             try {
@@ -174,6 +195,14 @@ class RemoteSession(
         message = text
     }
 
+    private fun markReconnecting() {
+        if (!closed && state == State.RUNNING) state = State.RECONNECTING
+    }
+
+    private fun markConnected() {
+        if (!closed && state == State.RECONNECTING) state = State.RUNNING
+    }
+
     private fun onData(payload: ByteArray) {
         if (closed) return
         if (!gotData) {
@@ -195,7 +224,7 @@ class RemoteSession(
     private fun onLost() {
         if (closed || state == State.EXITED || state == State.FAILED) return
         state = State.EXITED
-        banner("[Connection to Termux lost]")
+        banner("[" + appContext.getString(R.string.terminal_err_lost) + "]")
         closeSocket()
     }
 
@@ -243,6 +272,13 @@ class RemoteSession(
     fun copyTranscript() {
         val text = emulator.screen.transcriptText?.trimEnd().orEmpty()
         if (text.isNotEmpty()) onCopyTextToClipboard(text)
+    }
+
+    /** Wipes the scrollback and asks the shell to redraw its prompt (Ctrl-L). */
+    fun clearAll() {
+        emulator.screen.clearTranscript()
+        write("\u000c")
+        onScreen?.invoke()
     }
 
     fun applyScheme(s: TerminalScheme) {
@@ -303,5 +339,6 @@ class RemoteSession(
         const val T_EXIT = 4
         private const val MAX_FRAME = 1 shl 20
         private const val CONNECT_TIMEOUT_MS = 15_000L
+        private const val RECONNECT_TIMEOUT_MS = 6_000L
     }
 }

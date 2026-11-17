@@ -212,16 +212,11 @@ fun TerminalScreen(
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.terminal_clear)) },
-                            leadingIcon = { Icon(XIcons.ClearAll, null) },
-                            onClick = { menuOpen = false; selected?.session?.write("\u000c") },
+                            leadingIcon = { Icon(XIcons.DeleteSweep, null) },
+                            onClick = { menuOpen = false; selected?.session?.clearAll() },
                         )
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.terminal_settings)) },
-                            leadingIcon = { Icon(XIcons.Settings, null) },
-                            onClick = { menuOpen = false; settingsOpen = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.terminal_open_termux)) },
+                            text = { Text(stringResource(R.string.terminal_menu_termux)) },
                             leadingIcon = { Icon(XIcons.OpenInNew, null) },
                             onClick = {
                                 menuOpen = false
@@ -229,9 +224,9 @@ fun TerminalScreen(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.termux_setup_action)) },
-                            leadingIcon = { Icon(XIcons.Tools, null) },
-                            onClick = { menuOpen = false; onOpenSetup() },
+                            text = { Text(stringResource(R.string.terminal_settings)) },
+                            leadingIcon = { Icon(XIcons.Settings, null) },
+                            onClick = { menuOpen = false; settingsOpen = true },
                         )
                     }
                 },
@@ -290,8 +285,9 @@ fun TerminalScreen(
                     bg = Color(scheme.bg),
                     fg = Color(scheme.fg),
                     onRetry = {
+                        // Close first (frees the tab slot) but never leave the screen: the new tab opens right away.
                         val dir = selected.session.dir
-                        closeTab(selected)
+                        TerminalHub.close(selected)
                         TerminalHub.newTab(app, dir)
                     },
                     onClose = { closeTab(selected) },
@@ -365,7 +361,7 @@ private fun TabStrip(
                             Modifier.size(8.dp).clip(CircleShape).background(
                                 when (tab.session.state) {
                                     RemoteSession.State.RUNNING -> Color(0xFF4CAF50)
-                                    RemoteSession.State.STARTING -> Color(0xFFFFB300)
+                                    RemoteSession.State.STARTING, RemoteSession.State.RECONNECTING -> Color(0xFFFFB300)
                                     else -> Color(0xFFE53935)
                                 },
                             ),
@@ -426,6 +422,18 @@ private fun StatusOverlay(
                     Text(stringResource(R.string.terminal_exited), Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = onRetry) { Text(stringResource(R.string.terminal_restart)) }
                     TextButton(onClick = onClose) { Text(stringResource(R.string.terminal_close_tab)) }
+                }
+            }
+        }
+        RemoteSession.State.RECONNECTING -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Surface(
+                Modifier.padding(12.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(stringResource(R.string.terminal_reconnecting), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

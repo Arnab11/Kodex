@@ -38,7 +38,7 @@ object TerminalHub {
         TerminalPrefs.ensure(context)
         lastDir = dir
         val live = tabs.firstOrNull {
-            it.session.dir == dir && (it.session.state == RemoteSession.State.RUNNING || it.session.state == RemoteSession.State.STARTING)
+            it.session.dir == dir && (it.session.state == RemoteSession.State.RUNNING || it.session.state == RemoteSession.State.STARTING || it.session.state == RemoteSession.State.RECONNECTING)
         }
         if (live != null) selectedId = live.id else newTab(context, dir)
         navEvents.tryEmit(Unit)
@@ -87,7 +87,7 @@ object TerminalHub {
             return
         }
         val token = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
-        val command = PtydHelper.launchCommand(port, token, session.dir, TerminalPrefs.shell, 80, 24, TerminalPrefs.wakeLock)
+        val command = PtydHelper.launchCommand(port, token, session.dir, TerminalPrefs.shell, 80, 24, TerminalPrefs.wakeLock, TerminalPrefs.keepAliveMin)
         if (!TermuxLauncher.startBackground(app, arrayOf("-lc", command), null, null)) {
             session.fail(app.getString(R.string.terminal_err_refused))
             return

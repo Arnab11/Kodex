@@ -34,6 +34,7 @@ fun SettingsDiagnosticsScreen(
     onOpenGitLogs: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenTerminalSettings: () -> Unit = {},
+    onOpenTermuxSetup: () -> Unit = {},
 ) {
     val gitStatusPollingEnabled by viewModel.gitStatusPollingEnabled.collectAsStateWithLifecycle()
     var showBackup by remember { mutableStateOf(false) }
@@ -90,8 +91,16 @@ fun SettingsDiagnosticsScreen(
                     title = stringResource(R.string.terminal_title),
                     subtitle = stringResource(R.string.terminal_settings_row_desc),
                     isFirst = true,
-                    isLast = true,
                     onClick = onOpenTerminalSettings,
+                )
+                CategoryRowGap()
+                CategoryRow(
+                    icon = XIcons.Tools,
+                    chevron = XIcons.ChevronRight,
+                    title = stringResource(R.string.menu_termux_setup),
+                    subtitle = stringResource(R.string.termux_setup_row_desc),
+                    isLast = true,
+                    onClick = onOpenTermuxSetup,
                 )
             }
 

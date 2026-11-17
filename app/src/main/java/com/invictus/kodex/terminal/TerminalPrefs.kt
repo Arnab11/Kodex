@@ -29,6 +29,9 @@ object TerminalPrefs {
         private set
     var wakeLock by mutableStateOf(false)
         private set
+    /** How long Termux keeps a shell alive while Kodex is away (screen off, other app). */
+    var keepAliveMin by mutableStateOf(30)
+        private set
 
     @Synchronized
     fun ensure(context: Context) {
@@ -44,6 +47,7 @@ object TerminalPrefs {
         vibrate = p.getBoolean("vibrate", true)
         maxTabs = p.getInt("max_tabs", 8)
         wakeLock = p.getBoolean("wake_lock", false)
+        keepAliveMin = p.getInt("keep_alive_min", 30)
     }
 
     /** The in-app terminal is only used while the engine is set up AND the user has it switched on. */
@@ -64,6 +68,7 @@ object TerminalPrefs {
     fun updateShell(v: String) { shell = v; sp?.edit()?.putString("shell", v)?.apply() }
     fun updateVibrate(v: Boolean) { vibrate = v; sp?.edit()?.putBoolean("vibrate", v)?.apply() }
     fun updateMaxTabs(v: Int) { maxTabs = v; sp?.edit()?.putInt("max_tabs", v)?.apply() }
+    fun updateKeepAliveMin(v: Int) { keepAliveMin = v; sp?.edit()?.putInt("keep_alive_min", v)?.apply() }
     fun updateWakeLock(v: Boolean) { wakeLock = v; sp?.edit()?.putBoolean("wake_lock", v)?.apply() }
 
     const val FONT_MIN = 8
@@ -71,4 +76,5 @@ object TerminalPrefs {
     val SCROLLBACKS = listOf(1000, 2000, 5000, 10000)
     val SHELLS = listOf("bash", "zsh", "fish")
     val TAB_LIMITS = listOf(4, 8, 12)
+    val KEEP_ALIVE = listOf(5, 15, 30, 60)
 }

@@ -79,19 +79,27 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         job = viewModelScope.launch {
             checking = true
-            val r = TermuxRunner.run(ctx, null, TermuxSetupModel.PROBE_COMMAND, timeoutMs = 8_000L)
-            val parsed = if (r.error == null && r.stdout.isNotBlank()) {
+            // Once Termux has answered, it accepts Kodex for good. After a restart or an app update it can need
+            // a while to come up, so a miss gets a long wait plus one retry, and never un-learns "accepted".
+            val known = TermuxSetupPrefs.externalOk(ctx)
+            var r = TermuxRunner.run(ctx, null, TermuxSetupModel.PROBE_COMMAND, timeoutMs = if (known) 20_000L else 8_000L)
+            var answered = r.error == null && r.stdout.isNotBlank()
+            if (!answered && known) {
+                r = TermuxRunner.run(ctx, null, TermuxSetupModel.PROBE_COMMAND, timeoutMs = 20_000L)
+                answered = r.error == null && r.stdout.isNotBlank()
+            }
+            val parsed = if (answered) {
                 TermuxSetupModel.parseProbe(r.stdout)
             } else {
                 // No answer: Termux is not accepting external apps yet (or could not start).
                 TermuxProbe(externalAllowed = false, storageOk = false, mirrorHost = null, installed = emptySet())
             }
             probe = parsed
-            TermuxSetupPrefs.setExternalOk(ctx, parsed.externalAllowed)
-            com.invictus.kodex.terminal.TerminalPrefs.ensure(ctx)
-            com.invictus.kodex.terminal.TerminalPrefs.markEngine(
-                parsed.externalAllowed && TermuxSetupModel.TERMINAL_ENGINE_PACKAGE in parsed.installed,
-            )
+            if (answered) {
+                TermuxSetupPrefs.setExternalOk(ctx, true)
+                com.invictus.kodex.terminal.TerminalPrefs.ensure(ctx)
+                com.invictus.kodex.terminal.TerminalPrefs.markEngine(TermuxSetupModel.TERMINAL_ENGINE_PACKAGE in parsed.installed)
+            }
             if (installStarted && parsed.externalAllowed) {
                 verify = TermuxSetupModel.allPackages(selection).map { it to (it in parsed.installed) }
             }

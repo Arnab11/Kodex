@@ -62,6 +62,13 @@ fun TerminalSettingsContent(modifier: Modifier = Modifier) {
             }
         }
 
+        Label(stringResource(R.string.terminal_set_keepalive))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TerminalPrefs.KEEP_ALIVE.forEach {
+                FilterChip(selected = TerminalPrefs.keepAliveMin == it, onClick = { TerminalPrefs.updateKeepAliveMin(it) }, label = { Text("$it min") })
+            }
+        }
+
         SwitchLine(stringResource(R.string.terminal_set_vibrate), null, TerminalPrefs.vibrate, TerminalPrefs::updateVibrate)
         SwitchLine(stringResource(R.string.terminal_set_wakelock), stringResource(R.string.terminal_set_wakelock_sub), TerminalPrefs.wakeLock, TerminalPrefs::updateWakeLock)
         Text(

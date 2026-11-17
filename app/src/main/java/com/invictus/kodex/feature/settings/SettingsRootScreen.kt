@@ -259,6 +259,7 @@ fun SettingsRootScreen(
                                         onOpenCrashLogs = { activeSubScreen = SettingsSubScreen.CrashLogs },
                                         onOpenGitLogs = { activeSubScreen = SettingsSubScreen.GitLogs },
                                         onOpenTerminalSettings = { activeSubScreen = SettingsSubScreen.Terminal },
+                                        onOpenTermuxSetup = onOpenTermuxSetup,
                                     )
                                     SettingsCategory.About -> AboutScreen(
                                         onBack = onBack,

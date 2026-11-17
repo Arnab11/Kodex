@@ -73,6 +73,11 @@ private fun saveHistory(context: Context, items: List<String>) {
         .edit().putString("history", items.joinToString(HISTORY_SEP.toString())).apply()
 }
 
+/** Wipes the Run dialog's remembered commands (Settings -> Terminal). */
+fun clearRunHistory(context: Context) {
+    context.getSharedPreferences("termux_run", Context.MODE_PRIVATE).edit().remove("history").apply()
+}
+
 /** Commands that make sense for what is in [dir]: project-specific ones first, then the always-useful ones. */
 private fun suggestionsFor(dir: File): List<String> {
     fun has(name: String) = File(dir, name).exists()

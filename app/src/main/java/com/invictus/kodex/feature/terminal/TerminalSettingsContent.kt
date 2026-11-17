@@ -26,8 +26,6 @@ import com.invictus.kodex.terminal.TerminalSchemes
 @Composable
 fun TerminalSettingsContent(modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SwitchLine(stringResource(R.string.terminal_set_in_app), stringResource(R.string.terminal_set_in_app_sub), TerminalPrefs.useInApp, TerminalPrefs::updateUseInApp)
-
         Label(stringResource(R.string.terminal_set_scheme))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TerminalSchemes.all.forEach { (id, name) ->

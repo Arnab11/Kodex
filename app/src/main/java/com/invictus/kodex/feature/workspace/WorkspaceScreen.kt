@@ -231,7 +231,7 @@ fun WorkspaceScreen(
     }
     val openTermux: () -> Unit = openTermux@{
         com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
-        if (com.invictus.kodex.terminal.TerminalPrefs.useInApp) {
+        if (com.invictus.kodex.terminal.TerminalPrefs.inAppActive) {
             com.invictus.kodex.terminal.TerminalHub.open(context, state.root)
             return@openTermux
         }
@@ -266,15 +266,6 @@ fun WorkspaceScreen(
         }
     }
     val onOpenTerminal: () -> Unit = { withTermux(openTermux) }
-    var showRunCommand by remember { mutableStateOf(false) }
-    val onRunCommand: () -> Unit = { withTermux { showRunCommand = true } }
-    if (showRunCommand) {
-        TermuxRunDialog(
-            dir = state.root,
-            onOpenTerminal = openTermux,
-            onDismiss = { showRunCommand = false },
-        )
-    }
 
     // `kodex <folder>` in Termux asks for this folder to become the project.
     val pendingProjectDir by ExternalProjectOpen.pending.collectAsStateWithLifecycle()
@@ -305,7 +296,6 @@ fun WorkspaceScreen(
                     onOpenGitHub = { onOpenGitHub(state.root) },
                     onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
                     onOpenTerminal = onOpenTerminal,
-                    onRunCommand = onRunCommand,
                     terminalEnabled = TermuxSetupPrefs.enabled(context).value,
                     onOpenSettings = onOpenSettings,
                     onCollapseSidebar = onCollapse,
@@ -555,14 +545,6 @@ private fun WorkspaceTopBar(
                             onClick = {
                                 menuOpen = false
                                 onOpenTerminal()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_run_command)) },
-                            leadingIcon = { Icon(XIcons.PlayArrow, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onRunCommand()
                             },
                         )
                     }

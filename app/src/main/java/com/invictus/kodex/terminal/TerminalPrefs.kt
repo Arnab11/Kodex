@@ -10,7 +10,10 @@ import androidx.compose.runtime.setValue
 object TerminalPrefs {
     private var sp: SharedPreferences? = null
 
-    var useInApp by mutableStateOf(true)
+    var useInApp by mutableStateOf(false)
+        private set
+    /** True once Termux's terminal engine (python) was seen installed by the setup screen. */
+    var engineReady by mutableStateOf(false)
         private set
     var scheme by mutableStateOf("kodex")
         private set
@@ -32,7 +35,8 @@ object TerminalPrefs {
         if (sp != null) return
         val p = context.applicationContext.getSharedPreferences("terminal_prefs", Context.MODE_PRIVATE)
         sp = p
-        useInApp = p.getBoolean("use_in_app", true)
+        useInApp = p.getBoolean("use_in_app", false)
+        engineReady = p.getBoolean("engine_ready", false)
         scheme = p.getString("scheme", "kodex") ?: "kodex"
         fontSp = p.getInt("font_sp", 14).coerceIn(FONT_MIN, FONT_MAX)
         scrollback = p.getInt("scrollback", 2000)
@@ -40,6 +44,17 @@ object TerminalPrefs {
         vibrate = p.getBoolean("vibrate", true)
         maxTabs = p.getInt("max_tabs", 8)
         wakeLock = p.getBoolean("wake_lock", false)
+    }
+
+    /** The in-app terminal is only used while the engine is set up AND the user has it switched on. */
+    val inAppActive: Boolean get() = useInApp && engineReady
+
+    /** Called with each Termux probe result. First time the engine turns up, the in-app terminal switches on. */
+    fun markEngine(ready: Boolean) {
+        if (ready == engineReady) return
+        engineReady = ready
+        sp?.edit()?.putBoolean("engine_ready", ready)?.apply()
+        if (ready) updateUseInApp(true)
     }
 
     fun updateUseInApp(v: Boolean) { useInApp = v; sp?.edit()?.putBoolean("use_in_app", v)?.apply() }

@@ -21,8 +21,14 @@
     <string name="terminal_open_termux">Open in Termux app</string>
     <string name="terminal_tab_limit">Tab limit reached (%1$d). Close a tab or raise the limit in terminal settings.</string>
 
-    <string name="terminal_set_in_app">Terminal inside Kodex</string>
+    <string name="terminal_set_in_app">In-app terminal (Kodex)</string>
+    <string name="terminal_set_in_app_needs_setup">Needs the Termux terminal engine (python). Tap to set up.</string>
     <string name="terminal_set_in_app_sub">Off: Terminal and Run file open the Termux app instead</string>
+    <string name="terminal_settings_row_desc">Enable, in-app terminal, Termux setup, appearance</string>
+    <string name="terminal_set_run_group">Run command</string>
+    <string name="terminal_set_run_history_desc">Forget the recent commands of the Run dialog</string>
+    <string name="terminal_set_run_history_cleared">History cleared</string>
+    <string name="terminal_set_appearance">In-app terminal options</string>
     <string name="terminal_set_scheme">Colour scheme</string>
     <string name="terminal_set_font">Font size: %1$d sp</string>
     <string name="terminal_set_shell">Shell</string>

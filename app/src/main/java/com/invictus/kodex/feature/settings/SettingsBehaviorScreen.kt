@@ -47,7 +47,6 @@ fun SettingsBehaviorScreen(
     viewModel: EditorViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onOpenTermuxSetup: () -> Unit = {},
 ) {
     val autoReloadExternal by viewModel.autoReloadExternalChanges.collectAsStateWithLifecycle()
     val restoreTabsOnOpen by viewModel.restoreTabsOnOpen.collectAsStateWithLifecycle()
@@ -56,7 +55,6 @@ fun SettingsBehaviorScreen(
     val searchExtraExcludes by viewModel.searchExtraExcludes.collectAsStateWithLifecycle()
     val searchMaxFileMb by viewModel.searchMaxFileMb.collectAsStateWithLifecycle()
     val appContext = LocalContext.current.applicationContext
-    val terminalEnabled = TermuxSetupPrefs.enabled(appContext)
     val scope = rememberCoroutineScope()
     var excludesText by remember(searchExtraExcludes) { mutableStateOf(searchExtraExcludes) }
 
@@ -109,28 +107,6 @@ fun SettingsBehaviorScreen(
                     checked = fileTreeHScroll,
                     onCheckedChange = viewModel::setFileTreeHScrollLongNames,
                 )
-            }
-
-            SettingsSectionHeader(stringResource(R.string.settings_group_terminal))
-            SettingsSectionCard {
-                SwitchSettingRow(
-                    title = stringResource(R.string.termux_enable),
-                    subtitle = stringResource(R.string.termux_enable_desc),
-                    checked = terminalEnabled.value,
-                    onCheckedChange = { TermuxSetupPrefs.setEnabled(appContext, it) },
-                )
-                SettingsDivider()
-                ClickableSettingRow(
-                    title = stringResource(R.string.menu_termux_setup),
-                    subtitle = stringResource(R.string.termux_setup_row_desc),
-                    chevron = XIcons.ChevronRight,
-                    onClick = onOpenTermuxSetup,
-                )
-                if (terminalEnabled.value) {
-                    SettingsDivider()
-                    com.invictus.kodex.terminal.TerminalPrefs.ensure(appContext)
-                    com.invictus.kodex.feature.terminal.TerminalSettingsContent()
-                }
             }
 
             SettingsSectionHeader(stringResource(R.string.settings_group_search))

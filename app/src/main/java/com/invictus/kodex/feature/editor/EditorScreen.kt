@@ -239,7 +239,7 @@ fun EditorScreen(
                                     scope.launch {
                                         if (viewModel.saveActiveIfDirty()) {
                                             com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
-                                            val ok = if (com.invictus.kodex.terminal.TerminalPrefs.useInApp) {
+                                            val ok = if (com.invictus.kodex.terminal.TerminalPrefs.inAppActive) {
                                                 com.invictus.kodex.terminal.TerminalHub.runFile(context, runFile)
                                             } else {
                                                 com.invictus.kodex.core.external.TermuxLauncher.runFile(context, runFile)

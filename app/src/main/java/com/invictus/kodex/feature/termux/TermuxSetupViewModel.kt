@@ -88,6 +88,10 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
             }
             probe = parsed
             TermuxSetupPrefs.setExternalOk(ctx, parsed.externalAllowed)
+            com.invictus.kodex.terminal.TerminalPrefs.ensure(ctx)
+            com.invictus.kodex.terminal.TerminalPrefs.markEngine(
+                parsed.externalAllowed && TermuxSetupModel.TERMINAL_ENGINE_PACKAGE in parsed.installed,
+            )
             if (installStarted && parsed.externalAllowed) {
                 verify = TermuxSetupModel.allPackages(selection).map { it to (it in parsed.installed) }
             }

@@ -33,6 +33,7 @@ fun SettingsDiagnosticsScreen(
     onOpenCrashLogs: () -> Unit,
     onOpenGitLogs: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenTerminalSettings: () -> Unit = {},
 ) {
     val gitStatusPollingEnabled by viewModel.gitStatusPollingEnabled.collectAsStateWithLifecycle()
     var showBackup by remember { mutableStateOf(false) }
@@ -78,6 +79,19 @@ fun SettingsDiagnosticsScreen(
                     isFirst = true,
                     isLast = true,
                     onClick = { showBackup = true },
+                )
+            }
+
+            SettingsSectionHeader(stringResource(R.string.settings_group_terminal))
+            SettingsSectionCard {
+                CategoryRow(
+                    icon = XIcons.Terminal,
+                    chevron = XIcons.ChevronRight,
+                    title = stringResource(R.string.terminal_title),
+                    subtitle = stringResource(R.string.terminal_settings_row_desc),
+                    isFirst = true,
+                    isLast = true,
+                    onClick = onOpenTerminalSettings,
                 )
             }
 

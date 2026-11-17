@@ -172,6 +172,7 @@ fun TerminalScreen(
 
     var menuOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var runOpen by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<TerminalHub.Tab?>(null) }
 
     fun newTab() {
@@ -193,6 +194,9 @@ fun TerminalScreen(
                 title = { Text(stringResource(R.string.terminal_title)) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, null) } },
                 actions = {
+                    IconButton(onClick = { runOpen = true }, enabled = selected != null) {
+                        Icon(XIcons.PlayArrow, stringResource(R.string.terminal_set_run_group))
+                    }
                     IconButton(onClick = ::newTab) { Icon(XIcons.Add, stringResource(R.string.terminal_new_tab)) }
                     IconButton(onClick = { menuOpen = true }) { Icon(XIcons.MoreVert, null) }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -257,6 +261,9 @@ fun TerminalScreen(
                         TerminalView(ctx, null).also { v ->
                             client.view = v
                             v.setTerminalViewClient(client)
+                            // The renderer only exists after setTextSize; setTypeface before it is an NPE.
+                            v.setTextSize(fontPx)
+                            v.tag = fontPx
                             v.setTypeface(Typeface.MONOSPACE)
                             v.isFocusable = true
                             v.isFocusableInTouchMode = true
@@ -308,6 +315,14 @@ fun TerminalScreen(
                 }
             },
             dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(stringResource(R.string.terminal_cancel)) } },
+        )
+    }
+
+    if (runOpen && selected != null) {
+        com.invictus.kodex.feature.workspace.TermuxRunDialog(
+            dir = selected.session.dir,
+            onOpenTerminal = { runOpen = false; TermuxLauncher.openSession(context, selected.session.dir) },
+            onDismiss = { runOpen = false },
         )
     }
 

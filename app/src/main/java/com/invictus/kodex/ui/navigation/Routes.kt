@@ -16,6 +16,7 @@ object Routes {
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_EDITING = "settings/editing"
     const val SETTINGS_BEHAVIOR = "settings/behavior"
+    const val SETTINGS_TERMINAL = "settings/terminal"
     const val SETTINGS_DIAGNOSTICS = "settings/diagnostics"
     const val SETTINGS_GIT_LOGS = "settings/git_logs"
     const val SETTINGS_CRASH_LOGS = "settings/crash_logs"

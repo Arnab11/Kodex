@@ -46,6 +46,7 @@ private enum class SettingsSubScreen {
     CrashLogs,
     GitLogs,
     Libraries,
+    Terminal,
 }
 
 /** Root of the Settings screen. Order: Appearance, Editor, Workspace, GitHub, AI Assistant, Advanced, About. */
@@ -226,6 +227,10 @@ fun SettingsRootScreen(
                             SettingsSubScreen.CrashLogs -> CrashLogsScreen(onBack = { activeSubScreen = SettingsSubScreen.None })
                             SettingsSubScreen.GitLogs -> GitLogsScreen(onBack = { activeSubScreen = SettingsSubScreen.None })
                             SettingsSubScreen.Libraries -> LibrariesScreen(onBack = { activeSubScreen = SettingsSubScreen.None })
+                            SettingsSubScreen.Terminal -> SettingsTerminalScreen(
+                                onBack = { activeSubScreen = SettingsSubScreen.None },
+                                onOpenTermuxSetup = onOpenTermuxSetup,
+                            )
                             SettingsSubScreen.None -> {
                                 when (cat) {
                                     SettingsCategory.Appearance -> SettingsAppearanceScreen(
@@ -239,7 +244,6 @@ fun SettingsRootScreen(
                                     SettingsCategory.Behavior -> SettingsBehaviorScreen(
                                         viewModel = effectiveEditorVm,
                                         onBack = onBack,
-                                        onOpenTermuxSetup = onOpenTermuxSetup,
                                     )
                                     SettingsCategory.GitHub -> SettingsGitHubScreen(
                                         onBack = onBack,
@@ -254,6 +258,7 @@ fun SettingsRootScreen(
                                         onBack = onBack,
                                         onOpenCrashLogs = { activeSubScreen = SettingsSubScreen.CrashLogs },
                                         onOpenGitLogs = { activeSubScreen = SettingsSubScreen.GitLogs },
+                                        onOpenTerminalSettings = { activeSubScreen = SettingsSubScreen.Terminal },
                                     )
                                     SettingsCategory.About -> AboutScreen(
                                         onBack = onBack,

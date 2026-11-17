@@ -270,6 +270,7 @@ fun KodexNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenCrashLogs = { navController.navigate(Routes.SETTINGS_CRASH_LOGS) },
                 onOpenGitLogs = { navController.navigate(Routes.SETTINGS_GIT_LOGS) },
+                onOpenTerminalSettings = { navController.navigate(Routes.SETTINGS_TERMINAL) { launchSingleTop = true } },
             )
         }
         composable(Routes.SETTINGS_CRASH_LOGS) {
@@ -293,6 +294,11 @@ fun KodexNavHost(
         composable(Routes.SETTINGS_BEHAVIOR) {
             SettingsBehaviorScreen(
                 viewModel = editorViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_TERMINAL) {
+            com.invictus.kodex.feature.settings.SettingsTerminalScreen(
                 onBack = { navController.popBackStack() },
                 onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )

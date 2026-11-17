@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.core.external.TermuxSetupPrefs
 import com.invictus.kodex.feature.terminal.TerminalSettingsContent
-import com.invictus.kodex.feature.workspace.clearRunHistory
+import com.invictus.kodex.feature.terminal.RunStore
 import com.invictus.kodex.terminal.TerminalPrefs
 import com.invictus.kodex.ui.icons.XIcons
 
@@ -91,7 +91,7 @@ fun SettingsTerminalScreen(
                         subtitle = stringResource(R.string.terminal_set_run_history_desc),
                         chevron = XIcons.Delete,
                         onClick = {
-                            clearRunHistory(appContext)
+                            RunStore.clearHistory(appContext)
                             Toast.makeText(appContext, R.string.terminal_set_run_history_cleared, Toast.LENGTH_SHORT).show()
                         },
                     )

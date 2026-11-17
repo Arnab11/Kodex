@@ -315,9 +315,16 @@ fun TerminalScreen(
     }
 
     if (runOpen && selected != null) {
-        com.invictus.kodex.feature.workspace.TermuxRunDialog(
+        TerminalRunSheet(
             dir = selected.session.dir,
-            onOpenTerminal = { runOpen = false; TermuxLauncher.openSession(context, selected.session.dir) },
+            canRunHere = selected.session.state == RemoteSession.State.RUNNING,
+            onRun = { cmd, inNewTab ->
+                if (!inNewTab) {
+                    selected.session.write(cmd + "\n")
+                } else if (TerminalHub.newTab(app, selected.session.dir, cmd + "\n") == null) {
+                    scope.launch { snackbar.showSnackbar(app.getString(R.string.terminal_tab_limit, TerminalPrefs.maxTabs)) }
+                }
+            },
             onDismiss = { runOpen = false },
         )
     }

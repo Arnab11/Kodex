@@ -11,6 +11,7 @@ object Routes {
     const val TOOLS_TRACER = "tools/tracer"
     const val EDITOR = "editor"
     const val TERMUX_SETUP = "termux_setup"
+    const val TERMINAL = "terminal"
     const val SETTINGS = "settings"
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_EDITING = "settings/editing"

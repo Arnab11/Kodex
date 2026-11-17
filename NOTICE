@@ -4,6 +4,12 @@ Copyright (c) 2024 Utsav Rajput
 This product includes software developed by third-party libraries:
 
 --------------------------------------------------------------------------------
+Termux terminal-emulator / terminal-view (in-app terminal)
+https://github.com/termux/termux-app
+Copyright (c) Termux developers
+Apache License 2.0 (terminal-view sources are vendored with modifications)
+
+--------------------------------------------------------------------------------
 Sora Editor
 https://github.com/Rosemoe/sora-editor
 Copyright (c) Rosemoe

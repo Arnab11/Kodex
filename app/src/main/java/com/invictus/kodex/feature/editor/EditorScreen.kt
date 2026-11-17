@@ -237,10 +237,14 @@ fun EditorScreen(
                             onClick = {
                                 termuxGate {
                                     scope.launch {
-                                        if (viewModel.saveActiveIfDirty() &&
-                                            !com.invictus.kodex.core.external.TermuxLauncher.runFile(context, runFile)
-                                        ) {
-                                            termuxProblem()
+                                        if (viewModel.saveActiveIfDirty()) {
+                                            com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
+                                            val ok = if (com.invictus.kodex.terminal.TerminalPrefs.useInApp) {
+                                                com.invictus.kodex.terminal.TerminalHub.runFile(context, runFile)
+                                            } else {
+                                                com.invictus.kodex.core.external.TermuxLauncher.runFile(context, runFile)
+                                            }
+                                            if (!ok) termuxProblem()
                                         }
                                     }
                                 }

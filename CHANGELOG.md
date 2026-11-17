@@ -10,6 +10,14 @@ pick the matching section as the GitHub Release notes.
 
 ## [Unreleased]
 
+### Added
+- In-app terminal: the Workspace **Terminal** menu and editor **Run file** now open a tab inside Kodex.
+  The shell still runs in Termux (a small python bridge, `kodex-ptyd`, on 127.0.0.1 with a one-time
+  token); Kodex draws it with the Termux terminal view. Multiple tabs (rename, duplicate, close),
+  extra-keys row with sticky Ctrl/Alt, pinch to zoom, colour schemes, shell / scrollback / tab-limit /
+  wake-lock settings. Setting "Terminal inside Kodex" off restores the old open-Termux behaviour.
+- Termux setup now installs `python` (terminal engine) and shows its status.
+
 ### ✨ Added
 
 #### 💻 Terminal (via Termux)

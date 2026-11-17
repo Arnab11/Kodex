@@ -67,3 +67,7 @@
 -keep class com.github.junrar.** { *; }
 -keep class org.apache.commons.compress.archivers.sevenz.** { *; }
 -keep class org.tukaani.xz.** { *; }
+
+# In-app terminal: Termux emulator (JitPack) + vendored terminal-view
+-keep class com.termux.** { *; }
+-dontwarn com.termux.**

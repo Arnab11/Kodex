@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- In-app terminal (Termux-backed) -->
+    <string name="terminal_title">Terminal</string>
+    <string name="terminal_new_tab">New tab</string>
+    <string name="terminal_starting">Starting Termux shell…</string>
+    <string name="terminal_err_no_helper">Could not reach the Termux shell. Check that Termux is set up and python is installed (Setup), then retry.</string>
+    <string name="terminal_err_refused">Termux did not accept the command. Check the Termux setup.</string>
+    <string name="terminal_retry">Retry</string>
+    <string name="terminal_exited">Session ended</string>
+    <string name="terminal_restart">Restart</string>
+    <string name="terminal_close_tab">Close tab</string>
+    <string name="terminal_rename">Rename tab</string>
+    <string name="terminal_duplicate">Duplicate tab</string>
+    <string name="terminal_ok">OK</string>
+    <string name="terminal_cancel">Cancel</string>
+    <string name="terminal_settings">Terminal settings</string>
+    <string name="terminal_copy_all">Copy all output</string>
+    <string name="terminal_paste">Paste</string>
+    <string name="terminal_clear">Clear screen</string>
+    <string name="terminal_open_termux">Open in Termux app</string>
+    <string name="terminal_tab_limit">Tab limit reached (%1$d). Close a tab or raise the limit in terminal settings.</string>
+
+    <string name="terminal_set_in_app">Terminal inside Kodex</string>
+    <string name="terminal_set_in_app_sub">Off: Terminal and Run file open the Termux app instead</string>
+    <string name="terminal_set_scheme">Colour scheme</string>
+    <string name="terminal_set_font">Font size: %1$d sp</string>
+    <string name="terminal_set_shell">Shell</string>
+    <string name="terminal_set_scrollback">Scrollback lines</string>
+    <string name="terminal_set_tabs">Maximum tabs</string>
+    <string name="terminal_set_vibrate">Vibrate on bell</string>
+    <string name="terminal_set_wakelock">Keep Termux awake</string>
+    <string name="terminal_set_wakelock_sub">Holds a wake lock while a terminal is started (uses battery)</string>
+    <string name="terminal_set_new_tabs_note">Shell, scrollback and wake lock apply to tabs opened from now on.</string>
+
+    <string name="termux_chk_engine">Terminal engine (python)</string>
+    <string name="termux_engine_hint">Needed by the in-app terminal. Installed by the setup below.</string>
+
+    <!-- Text-selection popup of the vendored terminal view -->
+    <string name="copy_text">Copy</string>
+    <string name="paste_text">Paste</string>
+    <string name="text_selection_more">More</string>
+</resources>

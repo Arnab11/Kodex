@@ -95,6 +95,12 @@ fun KodexNavHost(
     onOpenGitHubHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
+    // Workspace "Terminal" / editor "Run file" ask the hub to show the in-app terminal.
+    LaunchedEffect(navController) {
+        com.invictus.kodex.terminal.TerminalHub.navEvents.collect {
+            navController.navigate(Routes.TERMINAL) { launchSingleTop = true }
+        }
+    }
     // Activity-scoped on purpose: open tabs outlive the trip back to the file tree.
     val editorViewModel: EditorViewModel = viewModel(factory = EditorViewModel.Factory)
     val startDestination = remember {
@@ -182,6 +188,12 @@ fun KodexNavHost(
                 onOpenAi = AiGate?.let { g -> { root: java.io.File -> navController.navigate(g.agentRouteFor(root.path)) } },
                 onOpenTermuxSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+            )
+        }
+        composable(Routes.TERMINAL) {
+            com.invictus.kodex.feature.terminal.TerminalScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSetup = { navController.navigate(Routes.TERMUX_SETUP) { launchSingleTop = true } },
             )
         }
         composable(Routes.TERMUX_SETUP) {

@@ -25,6 +25,7 @@ xz = "1.10"
 junrar = "7.5.5"
 
 [libraries]
+termux-terminal-emulator = { module = "com.github.termux.termux-app:terminal-emulator", version = "v0.118.0" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }

@@ -205,13 +205,13 @@ turning it off hides every AI entry point and disables every AI route.
 
 <a id="-terminal"></a>
 
-Off by default. Turn it on in **Settings → Workspace → Terminal (Termux)**. Nothing is bundled in the APK (+0 MB): Kodex hands off to the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings a real terminal and packages such as git, ssh, python, node and clang.
+Off by default. Turn it on in **Settings → Workspace → Terminal (Termux)**. No shell or packages are bundled in the APK: the shell runs in the separate [Termux](https://github.com/termux/termux-app/releases) app (F-Droid / GitHub build), which brings packages such as git, ssh, python, node and clang. Kodex only draws it, with Termux's own terminal view and emulator (a few hundred KB).
 
 | Feature | Description |
 |---|---|
-| **Terminal** | Workspace ⋮ → *Terminal* opens a Termux session already inside the project folder |
+| **Terminal** | Workspace ⋮ → *Terminal* opens an in-app terminal tab inside the project folder: several tabs (rename / duplicate / close), extra-keys row with sticky Ctrl / Alt, pinch to zoom, colour schemes, shell / scrollback / tab limit / wake lock options. Needs `python` in Termux (the setup screen installs it). Turn **Terminal inside Kodex** off to open the Termux app instead |
 | **Run** | Workspace ⋮ → *Run* runs one command in the project folder and shows its output and exit code inside Kodex. Project-aware suggestions (Gradle, npm, pip, cargo, go, make, git…), your last 10 commands, elapsed time, copy / share / clear, wrap-lines switch, and **Run in Termux** for programs that need the keyboard. Output arrives when the command finishes (no live stream) |
-| **Run file** | A ▶ button in the editor saves the file and runs it in a visible Termux session in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`; says which package to install if the interpreter is missing |
+| **Run file** | A ▶ button in the editor saves the file and runs it in a new in-app terminal tab (or a visible Termux session if the in-app terminal is off) in its folder: `.py`, `.js` / `.mjs` / `.cjs`, `.sh` / `.bash`, `.rb`, `.php`, `.go`, `.java`, `.c`, `.cpp`, `.rs`; says which package to install if the interpreter is missing |
 | **`kodex` command** | In Termux, `kodex file.py` opens a file in the editor and `kodex .` / `kodex folder` opens that folder as the project; installed automatically when Kodex opens a Termux session |
 | **Setup screen** | *Settings → Workspace → Termux setup*: connection checks, preset (Minimal, Web dev, Android / JVM, Python), package chips that show what is already installed, extra packages, mirror, git name / email, and an install that runs in a visible Termux session |
 

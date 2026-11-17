@@ -143,6 +143,13 @@ fun TermuxSetupScreen(
                 )
                 SettingsDivider()
                 StatusRow(
+                    label = stringResource(R.string.termux_chk_engine),
+                    ok = TermuxSetupModel.TERMINAL_ENGINE_PACKAGE in installedPkgs,
+                    busy = viewModel.checking,
+                    hint = stringResource(R.string.termux_engine_hint),
+                )
+                SettingsDivider()
+                StatusRow(
                     label = stringResource(R.string.termux_chk_overlay),
                     ok = viewModel.overlayAck,
                     actionLabel = stringResource(R.string.termux_open_settings),

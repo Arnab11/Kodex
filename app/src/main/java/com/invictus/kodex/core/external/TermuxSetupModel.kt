@@ -81,8 +81,11 @@ object TermuxSetupModel {
     fun extraPackages(text: String): List<String> =
         text.split(Regex("[\\s,]+")).filter { it.matches(PACKAGE_NAME) }.distinct()
 
+    /** The in-app terminal's helper (kodex-ptyd) is a python script, so python is always installed. */
+    const val TERMINAL_ENGINE_PACKAGE = "python"
+
     fun allPackages(sel: SetupSelection): List<String> =
-        (sel.packages.toList().sorted() + extraPackages(sel.extra)).distinct()
+        (sel.packages.toList().sorted() + extraPackages(sel.extra) + TERMINAL_ENGINE_PACKAGE).distinct()
 
     private fun sq(s: String) = "'" + s.replace("'", "'\\''") + "'"
 

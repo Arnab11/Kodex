@@ -126,6 +126,11 @@ fun SettingsBehaviorScreen(
                     chevron = XIcons.ChevronRight,
                     onClick = onOpenTermuxSetup,
                 )
+                if (terminalEnabled.value) {
+                    SettingsDivider()
+                    com.invictus.kodex.terminal.TerminalPrefs.ensure(appContext)
+                    com.invictus.kodex.feature.terminal.TerminalSettingsContent()
+                }
             }
 
             SettingsSectionHeader(stringResource(R.string.settings_group_search))

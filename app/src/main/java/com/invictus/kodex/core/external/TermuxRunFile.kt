@@ -45,4 +45,16 @@ object TermuxRunFile {
             appendLine("echo; echo \"[exit \$code] Press Enter to close\"; read -r _")
         }
     }
+
+    /**
+     * Single line typed into an in-app terminal tab (cwd = the file's folder). Wrapped in `bash -c` so it
+     * works whatever shell the tab runs; the shell stays open afterwards, so no "press Enter" step.
+     */
+    fun inlineCommand(file: File): String? {
+        val runner = runnerFor(file) ?: return null
+        val cmd = runner.template(sq(file.name))
+        val script = "if command -v ${runner.bin} >/dev/null 2>&1; then $cmd; echo \"[exit \$?]\"; " +
+            "else echo '${runner.bin} is not installed. Run: pkg install ${runner.pkg}'; fi"
+        return "clear; bash -c ${sq(script)}"
+    }
 }

@@ -229,7 +229,12 @@ fun WorkspaceScreen(
             if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenTermuxSetup()
         }
     }
-    val openTermux: () -> Unit = {
+    val openTermux: () -> Unit = openTermux@{
+        com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
+        if (com.invictus.kodex.terminal.TerminalPrefs.useInApp) {
+            com.invictus.kodex.terminal.TerminalHub.open(context, state.root)
+            return@openTermux
+        }
         if (TermuxLauncher.openSession(context, state.root)) {
             scope.launch {
                 val result = snackbarHostState.showSnackbar(

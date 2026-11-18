@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -66,5 +67,21 @@ fun Modifier.expressiveClickable(
             indication = LocalIndication.current,
             enabled = enabled,
             onClick = onClick,
+        )
+}
+
+/** [expressiveClickable] plus a long-press action (haptic is up to the caller). */
+fun Modifier.expressiveCombinedClickable(
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    this
+        .expressivePressScale(interactionSource)
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            onClick = onClick,
+            onLongClick = onLongClick,
         )
 }

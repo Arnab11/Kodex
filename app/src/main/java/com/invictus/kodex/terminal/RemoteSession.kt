@@ -24,6 +24,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+import java.util.ArrayDeque
 import java.util.concurrent.RejectedExecutionException
 import kotlin.concurrent.thread
 
@@ -67,6 +68,20 @@ class RemoteSession(
     @Volatile private var rows = 24
     private var gotData = false
 
+    /**
+     * Output from the socket reader waits here and is fed to the emulator in bounded slices on the main
+     * thread (one redraw per slice), so a flood of output cannot starve touch/keyboard handling. Holds
+     * ByteArray (data) or Int (exit code, kept in order behind the data).
+     */
+    private val inbox = ArrayDeque<Any>()
+    private val inboxLock = Any()
+    private var inboxBytes = 0
+    private var drainScheduled = false
+    private val drainRunnable = Runnable { drain() }
+
+    /** Keystrokes typed while no socket is attached (starting / reconnecting); sent right after the next hello. */
+    private val unsent = java.io.ByteArrayOutputStream()
+
     /** Declared last: the emulator calls back into this object while it is being built. */
     val emulator: TerminalEmulator = TerminalEmulator(this, 80, 24, scrollback, this)
 
@@ -102,6 +117,7 @@ class RemoteSession(
             socket = s
             synchronized(lock) { out = s.getOutputStream() }
             writeFrame(T_HELLO, token.toByteArray())
+            flushUnsent()
             sendResize()
             main.post { markConnected() }
             if (!firstInput.isNullOrEmpty()) write(firstInput)
@@ -114,10 +130,14 @@ class RemoteSession(
                 val payload = ByteArray(len)
                 input.readFully(payload)
                 when (type) {
-                    T_DATA -> main.post { onData(payload) }
+                    T_DATA -> {
+                        // Backpressure: while the UI is behind, stop reading; the socket fills and the helper pauses the shell.
+                        while (!closed && synchronized(inboxLock) { inboxBytes } > MAX_INBOX) Thread.sleep(5)
+                        enqueue(payload)
+                    }
                     T_EXIT -> {
                         val code = if (len >= 4) ByteBuffer.wrap(payload).int else -1
-                        main.post { onExit(code) }
+                        enqueue(code)
                         return true
                     }
                 }
@@ -148,7 +168,11 @@ class RemoteSession(
 
     private fun writeFrame(type: Int, data: ByteArray) {
         synchronized(lock) {
-            val o = out ?: return
+            val o = out
+            if (o == null) {
+                if (type == T_DATA && unsent.size() + data.size <= MAX_UNSENT) unsent.write(data)
+                return
+            }
             val header = ByteBuffer.allocate(5).put(type.toByte()).putInt(data.size).array()
             o.write(header)
             if (data.isNotEmpty()) o.write(data)
@@ -171,6 +195,45 @@ class RemoteSession(
         queue(T_RESIZE, ByteBuffer.allocate(4).putShort(cols.toShort()).putShort(rows.toShort()).array())
     }
 
+    private fun flushUnsent() {
+        val pending = synchronized(lock) {
+            if (unsent.size() == 0) null else unsent.toByteArray().also { unsent.reset() }
+        } ?: return
+        writeFrame(T_DATA, pending)
+    }
+
+    private fun enqueue(item: Any) {
+        val post: Boolean
+        synchronized(inboxLock) {
+            inbox.addLast(item)
+            if (item is ByteArray) inboxBytes += item.size
+            post = !drainScheduled
+            if (post) drainScheduled = true
+        }
+        if (post) main.post(drainRunnable)
+    }
+
+    /** Main thread: feed at most DRAIN_BYTES to the emulator, redraw once, then yield to input/UI events. */
+    private fun drain() {
+        var budget = DRAIN_BYTES
+        var any = false
+        while (budget > 0 && !closed) {
+            val item = synchronized(inboxLock) {
+                inbox.pollFirst()?.also { if (it is ByteArray) inboxBytes -= it.size }
+            } ?: break
+            when (item) {
+                is ByteArray -> { applyData(item); budget -= item.size; any = true }
+                is Int -> { if (any) onScreen?.invoke(); any = false; onExit(item) }
+            }
+        }
+        if (any) onScreen?.invoke()
+        val more = synchronized(inboxLock) {
+            if (closed) inbox.clear()
+            if (inbox.isEmpty()) { drainScheduled = false; inboxBytes = 0; false } else true
+        }
+        if (more) main.post(drainRunnable)
+    }
+
     fun close() {
         if (closed) return
         closed = true
@@ -182,6 +245,8 @@ class RemoteSession(
         } catch (_: RejectedExecutionException) {
         }
         io.shutdown()
+        // A write blocked on a stalled helper would keep the executor (and the socket) alive: cut it from here too.
+        main.postDelayed({ closeSocket() }, 1500)
     }
 
     private fun closeSocket() {
@@ -203,14 +268,13 @@ class RemoteSession(
         if (!closed && state == State.RECONNECTING) state = State.RUNNING
     }
 
-    private fun onData(payload: ByteArray) {
+    private fun applyData(payload: ByteArray) {
         if (closed) return
         if (!gotData) {
             gotData = true
             state = State.RUNNING
         }
         emulator.append(payload, payload.size)
-        onScreen?.invoke()
     }
 
     private fun onExit(code: Int) {
@@ -252,7 +316,7 @@ class RemoteSession(
     }
 
     override fun write(data: ByteArray, offset: Int, count: Int) {
-        if (state == State.STARTING || state == State.RUNNING) queue(T_DATA, data.copyOfRange(offset, offset + count))
+        if (state == State.STARTING || state == State.RUNNING || state == State.RECONNECTING) queue(T_DATA, data.copyOfRange(offset, offset + count))
     }
 
     fun reset() {
@@ -338,6 +402,9 @@ class RemoteSession(
         const val T_CLOSE = 3
         const val T_EXIT = 4
         private const val MAX_FRAME = 1 shl 20
+        private const val MAX_INBOX = 2 shl 20
+        private const val DRAIN_BYTES = 48 * 1024
+        private const val MAX_UNSENT = 64 * 1024
         private const val CONNECT_TIMEOUT_MS = 15_000L
         private const val RECONNECT_TIMEOUT_MS = 6_000L
     }

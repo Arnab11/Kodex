@@ -3,6 +3,13 @@ package com.invictus.kodex.feature.project
 import android.os.Environment
 import com.invictus.kodex.ui.components.expressiveClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.invictus.kodex.feature.home.ProjectActionDialogs
+import com.invictus.kodex.ui.components.expressiveCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +48,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
@@ -238,6 +244,15 @@ fun OpenProjectSheet(
                     onGo = { if (typedPath != null && pathIsFolder == true) onOpen(File(typedPath)) },
                 )
             }
+            val browsingDir = state.browseDir.takeIf { showBrowse && needle.isEmpty() }
+            if (browsingDir != null) {
+                BreadcrumbBar(
+                    dir = browsingDir,
+                    storageRoot = storageRoot,
+                    onUp = { onEvent(ProjectsEvent.BrowseUp) },
+                    onJump = { onEvent(ProjectsEvent.Browse(it)) },
+                )
+            }
             val listModifier = if (expandFull) Modifier.weight(1f) else Modifier
             LazyColumn(modifier = listModifier, contentPadding = PaddingValues(bottom = 16.dp)) {
                 if (typedPath != null) {
@@ -259,7 +274,9 @@ fun OpenProjectSheet(
                     }
                 }
                 if (showBrowse) {
-                item(key = "h-browse") { SectionLabel(R.string.sheet_browse) }
+                if (state.browseDir == null || needle.isNotEmpty()) {
+                    item(key = "h-browse") { SectionLabel(R.string.sheet_browse) }
+                }
                 if (needle.isNotEmpty()) {
                     // Search active: poore storage se recursive results, browseDir/shortcuts ignore.
                     if (folderSearching && folderResults.isEmpty()) {
@@ -274,8 +291,9 @@ fun OpenProjectSheet(
                                 onEvent(ProjectsEvent.Browse(result.file))
                                 query = ""
                             },
-                            onOpen = { onOpen(result.file) },
                             onCopyPath = onCopyPath,
+                            onEvent = onEvent,
+                            isBackingUp = result.file.path in state.backingUp,
                         )
                     }
                 } else {
@@ -287,18 +305,12 @@ fun OpenProjectSheet(
                                 name = shortcut.label?.asString() ?: shortcut.file.name,
                                 file = shortcut.file,
                                 onEnter = { onEvent(ProjectsEvent.Browse(shortcut.file)) },
-                                onOpen = { onOpen(shortcut.file) },
                                 onCopyPath = onCopyPath,
+                                onEvent = onEvent,
+                                isBackingUp = shortcut.file.path in state.backingUp,
                             )
                         }
                     } else {
-                        item(key = "browse-head") {
-                            BrowseHeader(
-                                dir = browseDir,
-                                onUp = { onEvent(ProjectsEvent.BrowseUp) },
-                                onOpen = { onOpen(browseDir) },
-                            )
-                        }
                         val error = state.browseError
                         if (error != null) {
                             item(key = "browse-error") { HintText(error.asString(), isError = true) }
@@ -311,20 +323,24 @@ fun OpenProjectSheet(
                                 name = dir.name,
                                 file = dir,
                                 onEnter = { onEvent(ProjectsEvent.Browse(dir)) },
-                                onOpen = { onOpen(dir) },
                                 onCopyPath = onCopyPath,
+                                onEvent = onEvent,
+                                isBackingUp = dir.path in state.backingUp,
                             )
                         }
                     }
                 }
                 }
             }
+            if (browsingDir != null && state.browseError == null) {
+                OpenFolderBar(dir = browsingDir, storageRoot = storageRoot, onOpen = { onOpen(browsingDir) })
+            }
             SnackbarHost(snackbarHostState)
         }
         }
     }
 
-    state.renaming?.let { RenameProjectDialog(it, onEvent) }
+    ProjectActionDialogs(state = state, onEvent = onEvent)
 
     if (editingShortcuts) {
         EditShortcutsDialog(
@@ -530,137 +546,272 @@ private fun TypedPathRow(path: String, isFolder: Boolean?, onOpen: () -> Unit) {
     }
 }
 
-/** Address-bar style header while browsing inside a folder: up button, current path, Open. */
+private data class Crumb(val label: String, val file: File)
+
+/** Internal storage › Documents › .Modx › Projects: every segment is a folder you can jump back to. */
+private fun crumbsFor(dir: File, storageRoot: File, rootLabel: String): List<Crumb> {
+    val out = ArrayList<Crumb>()
+    val rootPath = storageRoot.path
+    var cur: File
+    val parts: List<String>
+    if (dir.path == rootPath || dir.path.startsWith(rootPath + "/")) {
+        out += Crumb(rootLabel, storageRoot)
+        cur = storageRoot
+        parts = dir.path.removePrefix(rootPath).split('/').filter { it.isNotEmpty() }
+    } else {
+        cur = File("/")
+        parts = dir.path.split('/').filter { it.isNotEmpty() }
+    }
+    for (part in parts) {
+        cur = File(cur, part)
+        out += Crumb(part, cur)
+    }
+    return out
+}
+
+/** Fixed header while browsing: back/up button + a scrollable breadcrumb; the current folder is highlighted. */
 @Composable
-private fun BrowseHeader(dir: File, onUp: () -> Unit, onOpen: () -> Unit) {
+private fun BreadcrumbBar(dir: File, storageRoot: File, onUp: () -> Unit, onJump: (File) -> Unit) {
+    val rootLabel = stringResource(R.string.workspace_root_internal)
+    val crumbs = remember(dir.path) { crumbsFor(dir, storageRoot, rootLabel) }
+    val scroll = rememberScrollState()
+    // Keep the current (last) segment in view; only follows layout changes, so manual scrolling is left alone.
+    LaunchedEffect(dir.path) { snapshotFlow { scroll.maxValue }.collect { scroll.scrollTo(it) } }
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onUp) {
                 Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
             }
-            Text(
-                text = dir.path,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.StartEllipsis,
-                modifier = Modifier.weight(1f),
-            )
-            OpenPill(onClick = onOpen)
+            Row(modifier = Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) {
+                crumbs.forEachIndexed { index, crumb ->
+                    if (index > 0) {
+                        Icon(
+                            XIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    val last = index == crumbs.lastIndex
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (last) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                            .then(if (last) Modifier else Modifier.expressiveClickable { onJump(crumb.file) })
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                    ) {
+                        Text(
+                            text = crumb.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (last) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (last) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-/** Small tonal "Open" button shared by the browse rows. */
+/** Pinned at the bottom of the sheet while browsing: opens the folder you are looking at as the workspace. */
 @Composable
-private fun OpenPill(onClick: () -> Unit) {
-    FilledTonalButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        modifier = Modifier.height(36.dp),
-    ) { Text(stringResource(R.string.action_open_folder)) }
+private fun OpenFolderBar(dir: File, storageRoot: File, onOpen: () -> Unit) {
+    val label = if (dir.path == storageRoot.path) stringResource(R.string.workspace_root_internal) else dir.name
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = onOpen,
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).height(52.dp),
+        ) {
+            Icon(XIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = stringResource(R.string.sheet_open_folder_named, label),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
-/** Recursive folder-search hit: name + its path under storage; tap enters, Open opens it. */
+/** Folders the app never renames/deletes: the device root and the standard Documents/Downloads. */
+private val ProtectedPaths: Set<String> by lazy {
+    setOf(
+        Environment.getExternalStorageDirectory().path,
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).path,
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path,
+    )
+}
+
+/** Recursive folder-search hit: name + its path under storage; tap enters it, long-press has the actions. */
 @Composable
 private fun FolderSearchResultRow(
     result: FolderSearchEngine.Result,
     onEnter: () -> Unit,
-    onOpen: () -> Unit,
     onCopyPath: (File) -> Unit,
+    onEvent: (ProjectsEvent) -> Unit,
+    isBackingUp: Boolean,
 ) {
     FolderEntryRow(
         name = result.name,
         file = result.file,
         subtitle = result.relativePath,
         onEnter = onEnter,
-        onOpen = onOpen,
         onCopyPath = onCopyPath,
+        onEvent = onEvent,
+        isBackingUp = isBackingUp,
     )
 }
 
-/** Tap enters the folder; the trailing button opens it as the workspace. */
+/** Tap enters the folder; long-press opens the actions. */
 @Composable
 private fun FolderRow(
     name: String,
     file: File,
     onEnter: () -> Unit,
-    onOpen: () -> Unit,
     onCopyPath: (File) -> Unit,
+    onEvent: (ProjectsEvent) -> Unit,
+    isBackingUp: Boolean,
     tileColor: Color? = null,
 ) {
     FolderEntryRow(
-        name = name, file = file, subtitle = file.path, onEnter = onEnter, onOpen = onOpen,
-        onCopyPath = onCopyPath, tileColor = tileColor,
+        name = name, file = file, subtitle = file.path, onEnter = onEnter, onCopyPath = onCopyPath,
+        onEvent = onEvent, isBackingUp = isBackingUp, tileColor = tileColor,
     )
 }
 
-/** Colored folder tile, name + path, tonal Open button and a overflow menu (same look as Home). */
+/** Colored folder tile, name + path, chevron. No buttons: tap enters, long-press shows Copy path / Info / Back up / Rename / Delete. */
 @Composable
 private fun FolderEntryRow(
     name: String,
     file: File,
     subtitle: String,
     onEnter: () -> Unit,
-    onOpen: () -> Unit,
     onCopyPath: (File) -> Unit,
+    onEvent: (ProjectsEvent) -> Unit,
+    isBackingUp: Boolean,
     tileColor: Color? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val accent = tileColor ?: projectColor(name)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .expressiveClickable(onClick = onEnter)
-            .padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(XIcons.Folder, contentDescription = null, tint = accent)
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        OpenPill(onClick = onOpen)
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(XIcons.MoreVert, contentDescription = null)
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.tree_menu_copy_path)) },
-                    onClick = {
-                        menuOpen = false
-                        onCopyPath(file)
+    val canModify = file.path !in ProtectedPaths
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .expressiveCombinedClickable(
+                    onClick = onEnter,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        menuOpen = true
                     },
+                )
+                .padding(start = 24.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(XIcons.Folder, contentDescription = null, tint = accent)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            if (isBackingUp) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    XIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            offset = DpOffset(56.dp, 0.dp),
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            val close = { menuOpen = false }
+            FolderMenuItem(stringResource(R.string.tree_menu_copy_path), XIcons.ContentCopy) {
+                close()
+                onCopyPath(file)
+            }
+            FolderMenuItem(stringResource(R.string.recent_menu_info), XIcons.Info) {
+                close()
+                onEvent(ProjectsEvent.ShowInfo(file))
+            }
+            FolderMenuItem(stringResource(R.string.recent_menu_backup), XIcons.CloudUpload, enabled = !isBackingUp) {
+                close()
+                onEvent(ProjectsEvent.Backup(file))
+            }
+            if (canModify) {
+                FolderMenuItem(stringResource(R.string.tree_menu_rename), XIcons.Edit) {
+                    close()
+                    onEvent(ProjectsEvent.StartRename(file))
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                FolderMenuItem(stringResource(R.string.tree_menu_delete), XIcons.Delete, danger = true) {
+                    close()
+                    onEvent(ProjectsEvent.StartDelete(file))
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun FolderMenuItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+        },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) },
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 14.dp),
+        modifier = Modifier.height(44.dp),
+    )
 }
 
 /** Tap opens; long-press opens the action menu at the finger (same pattern as the file tree). */

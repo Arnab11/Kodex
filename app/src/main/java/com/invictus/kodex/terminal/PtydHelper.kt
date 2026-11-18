@@ -32,6 +32,8 @@ import os, sys, pty, socket, select, struct, fcntl, termios, signal, shutil, hma
 
 LOG = os.path.expanduser("~/.kodex/ptyd.log")
 BUF_MAX = 256 * 1024
+OUT_HIGH = 512 * 1024
+IN_MAX = 4 * 1024 * 1024
 
 def log(msg):
     try:
@@ -60,6 +62,8 @@ class Bridge:
         self.conn = None
         self.rbuf = bytearray()
         self.pending = bytearray()
+        self.out = bytearray()
+        self.inq = bytearray()
         self.pid = None
         self.fd = None
         self.ever = False
@@ -77,7 +81,7 @@ class Bridge:
             yield t, payload
 
     def auth(self, c):
-        c.settimeout(5)
+        c.settimeout(2)
         buf = bytearray()
         try:
             while len(buf) < 5 or len(buf) < 5 + struct.unpack(">I", bytes(buf[1:5]))[0]:
@@ -92,7 +96,7 @@ class Bridge:
             if t != 0 or not hmac.compare_digest(payload, self.token):
                 return False
             self.rbuf = bytearray(buf[5 + n:])
-            c.settimeout(None)
+            c.setblocking(False)
             return True
         except (OSError, struct.error):
             return False
@@ -105,6 +109,7 @@ class Bridge:
             pass
         self.conn = None
         self.rbuf = bytearray()
+        self.out = bytearray()
         self.last_client = time.time()
 
     def spawn(self):
@@ -120,6 +125,9 @@ class Bridge:
                 os.execvpe(path, [path, "-l"], env)
             finally:
                 os._exit(127)
+        # Non-blocking master: a full PTY input queue must never stall the single relay loop.
+        fl = fcntl.fcntl(self.fd, fcntl.F_GETFL)
+        fcntl.fcntl(self.fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", self.rows, self.cols, 0, 0))
         log("shell started pid=%d %s" % (self.pid, path))
 
@@ -138,30 +146,29 @@ class Bridge:
             except OSError:
                 pass
         self.conn = c
+        self.out = bytearray()
         self.last_client = time.time()
         if self.pid is None:
             self.spawn()
         else:
             log("client reconnected")
         self.ever = True
+        if self.pending:
+            self.out += frame(1, bytes(self.pending))
+            self.pending = bytearray()
         if self.handle_frames():
             return True
-        if self.pending:
-            try:
-                self.conn.sendall(frame(1, bytes(self.pending)))
-                self.pending = bytearray()
-            except OSError:
-                self.drop("send failed after reconnect")
+        self.flush_out()
         return False
 
     def handle_frames(self):
         # True when the client asked to close.
         for t, payload in self.frames():
             if t == 1:
-                try:
-                    os.write(self.fd, payload)
-                except OSError:
-                    pass
+                if len(self.inq) + len(payload) <= IN_MAX:
+                    self.inq += payload
+                else:
+                    log("input queue full, dropped %d bytes" % len(payload))
             elif t == 2 and len(payload) == 4:
                 c, r = struct.unpack(">HH", payload)
                 try:
@@ -171,22 +178,47 @@ class Bridge:
             elif t == 3:
                 log("close requested")
                 return True
+        self.flush_in()
         return False
+
+    def flush_in(self):
+        # Keystrokes / pastes into the PTY without ever blocking.
+        while self.inq and self.fd is not None:
+            try:
+                n = os.write(self.fd, bytes(self.inq[:8192]))
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                self.inq = bytearray()
+                return
+            del self.inq[:n]
+
+    def flush_out(self):
+        # Output towards Kodex without ever blocking: leftovers wait for the socket to be writable.
+        while self.out and self.conn is not None:
+            try:
+                n = self.conn.send(bytes(self.out[:65536]))
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                self.drop("send failed")
+                return
+            del self.out[:n]
 
     def pump_pty(self):
         # False when the shell has ended.
         try:
-            data = os.read(self.fd, 8192)
+            data = os.read(self.fd, 16384)
+        except (BlockingIOError, InterruptedError):
+            return True
         except OSError:
             data = b""
         if not data:
             return False
         if self.conn is not None:
-            try:
-                self.conn.sendall(frame(1, data))
-                return True
-            except OSError:
-                self.drop("send failed")
+            self.out += frame(1, data)
+            self.flush_out()
+            return True
         self.pending += data
         if len(self.pending) > BUF_MAX:
             del self.pending[:len(self.pending) - BUF_MAX]
@@ -196,6 +228,8 @@ class Bridge:
         # True when the client asked to close.
         try:
             chunk = self.conn.recv(65536)
+        except (BlockingIOError, InterruptedError):
+            return False
         except OSError:
             chunk = b""
         if not chunk:
@@ -206,14 +240,25 @@ class Bridge:
 
     def loop(self):
         while True:
-            socks = [self.srv]
+            rl = [self.srv]
+            wl = []
             if self.fd is not None:
-                socks.append(self.fd)
+                # Backpressure: stop reading the shell while Kodex is behind, so the TCP window throttles it.
+                if self.conn is None or len(self.out) < OUT_HIGH:
+                    rl.append(self.fd)
+                if self.inq:
+                    wl.append(self.fd)
             if self.conn is not None:
-                socks.append(self.conn)
-            ready, _, _ = select.select(socks, [], [], 1.0)
+                rl.append(self.conn)
+                if self.out:
+                    wl.append(self.conn)
+            ready, wready, _ = select.select(rl, wl, [], 1.0)
             if self.srv in ready and self.accept_client():
                 return "close"
+            if self.fd is not None and self.fd in wready:
+                self.flush_in()
+            if self.conn is not None and self.conn in wready:
+                self.flush_out()
             if self.fd is not None and self.fd in ready and not self.pump_pty():
                 return "exit"
             if self.conn is not None and self.conn in ready and self.pump_client():
@@ -235,7 +280,8 @@ class Bridge:
                 log("shell exited code=%s" % code)
                 if self.conn is not None:
                     try:
-                        self.conn.sendall(frame(4, struct.pack(">i", code)))
+                        self.conn.settimeout(2)
+                        self.conn.sendall(bytes(self.out) + frame(4, struct.pack(">i", code)))
                     except OSError:
                         pass
             else:

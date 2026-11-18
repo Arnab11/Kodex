@@ -106,6 +106,7 @@
     <string name="sheet_path_missing">Folder not found</string>
     <string name="sheet_recent">Recent</string>
     <string name="sheet_browse">Browse</string>
+    <string name="sheet_open_folder_named">Open “%1$s”</string>
     <string name="sheet_no_subfolders">No subfolders</string>
     <string name="sheet_current">Open now</string>
     <string name="sheet_folder_missing">Folder missing · %1$s</string>

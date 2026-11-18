@@ -448,11 +448,9 @@ fun HomeScreen(
     }
 
     // The Open Project sheet draws its own rename dialog, so Home's copy steps aside while it is up.
-    ProjectActionDialogs(
-        state = projectsState,
-        onEvent = projectsViewModel::onEvent,
-        showRename = !showProjectSheet,
-    )
+    if (!showProjectSheet) {
+        ProjectActionDialogs(state = projectsState, onEvent = projectsViewModel::onEvent)
+    }
 
     if (showProjectSheet) {
         OpenProjectSheet(

@@ -225,6 +225,7 @@ class ProjectsViewModel(
                 is FsResult.Ok -> {
                     projects.onPathMoved(pending.file, result.value)
                     _uiState.update { it.copy(renaming = null) }
+                    _uiState.value.browseDir?.let { browse(it) }
                     val renamed = result.value
                     _effects.send(ProjectsEffect.ProjectMoved(pending.file, renamed))
                     _effects.send(ProjectsEffect.Message(UiText(R.string.msg_project_renamed, listOf(renamed.name))))
@@ -256,6 +257,7 @@ class ProjectsViewModel(
                 is FsResult.Ok -> {
                     projects.onProjectDeleted(pending.file)
                     _uiState.update { it.copy(deleting = null) }
+                    _uiState.value.browseDir?.let { browse(it) }
                     _effects.send(ProjectsEffect.ProjectDeleted(pending.file))
                     _effects.send(ProjectsEffect.Message(UiText(R.string.msg_project_deleted, listOf(pending.file.name))))
                 }

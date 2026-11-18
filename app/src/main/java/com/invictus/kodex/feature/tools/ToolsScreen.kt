@@ -40,6 +40,7 @@ enum class ToolSelection {
     Keystore,
     Splitter,
     Tracer,
+    IconMaker,
 }
 
 /** Home for small utilities. Dual-pane on tablets, card list on phones. */
@@ -50,6 +51,7 @@ fun ToolsScreen(
     onOpenKeystore: () -> Unit,
     onOpenSplitter: () -> Unit,
     onOpenTracer: () -> Unit,
+    onOpenIconMaker: () -> Unit,
 ) {
     val isTablet = isTabletLayout()
     var selectedTool by rememberSaveable { mutableStateOf(ToolSelection.Keystore) }
@@ -101,6 +103,15 @@ fun ToolsScreen(
                         if (inTabletMode) selectedTool = ToolSelection.Tracer else onOpenTracer()
                     },
                 )
+                ToolCard(
+                    icon = XIcons.Palette,
+                    title = R.string.tools_iconmaker_title,
+                    desc = R.string.tools_iconmaker_desc,
+                    isSelected = inTabletMode && selectedTool == ToolSelection.IconMaker,
+                    onClick = {
+                        if (inTabletMode) selectedTool = ToolSelection.IconMaker else onOpenIconMaker()
+                    },
+                )
             }
         }
     }
@@ -117,6 +128,7 @@ fun ToolsScreen(
                             ToolSelection.Keystore -> KeystoreToolScreen(onBack = onBack)
                             ToolSelection.Splitter -> FileSplitterScreen(onBack = onBack)
                             ToolSelection.Tracer -> ImageTracerScreen(onBack = onBack)
+                            ToolSelection.IconMaker -> IconMakerScreen(onBack = onBack)
                         }
                     }
                 }

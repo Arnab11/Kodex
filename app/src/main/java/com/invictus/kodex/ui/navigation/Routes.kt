@@ -9,6 +9,7 @@ object Routes {
     const val TOOLS_KEYSTORE = "tools/keystore"
     const val TOOLS_SPLITTER = "tools/splitter"
     const val TOOLS_TRACER = "tools/tracer"
+    const val TOOLS_ICON_MAKER = "tools/iconmaker"
     const val EDITOR = "editor"
     const val TERMUX_SETUP = "termux_setup"
     const val TERMINAL = "terminal"

@@ -1,0 +1,31 @@
+package com.invictus.kodex.core.iconmaker
+
+import android.graphics.Bitmap
+
+enum class GlyphKind { Symbol, Text, Picture }
+
+enum class BgKind { Solid, Gradient }
+
+/** Launcher masks used by the previews and by the legacy (pre-Android 8) PNGs. */
+enum class IconShape { Circle, Squircle, Rounded, Teardrop, Square }
+
+/** Everything that defines the icon. Sizes are percentages of the 66dp adaptive-icon safe zone. */
+data class IconSpec(
+    val kind: GlyphKind = GlyphKind.Symbol,
+    val symbol: String = "bolt",
+    val text: String = "K",
+    val picture: Bitmap? = null,
+    val tintPicture: Boolean = false,
+    val fgColor: Int = 0xFFFFFFFF.toInt(),
+    val sizePct: Int = 80,
+    val offsetXPct: Int = 0,
+    val offsetYPct: Int = 0,
+    val shadow: Boolean = false,
+    val bgKind: BgKind = BgKind.Gradient,
+    val bg1: Int = 0xFF7C4DFF.toInt(),
+    val bg2: Int = 0xFF3D2BC4.toInt(),
+    /** Android gradient angle, multiples of 45: 0 = left to right, 90 = bottom to top. */
+    val bgAngle: Int = 45,
+    /** Mask for the legacy PNGs; also the mask the previews use. */
+    val legacyShape: IconShape = IconShape.Rounded,
+)

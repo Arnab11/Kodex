@@ -28,6 +28,7 @@ import com.invictus.kodex.feature.editor.EditorViewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.invictus.kodex.feature.tools.FileSplitterScreen
+import com.invictus.kodex.feature.tools.IconMakerScreen
 import com.invictus.kodex.feature.tools.ImageTracerScreen
 import com.invictus.kodex.feature.tools.KeystoreToolScreen
 import com.invictus.kodex.feature.tools.ToolsScreen
@@ -152,6 +153,7 @@ fun KodexNavHost(
                 onOpenKeystore = { navController.navigate(Routes.TOOLS_KEYSTORE) },
                 onOpenSplitter = { navController.navigate(Routes.TOOLS_SPLITTER) },
                 onOpenTracer = { navController.navigate(Routes.TOOLS_TRACER) },
+                onOpenIconMaker = { navController.navigate(Routes.TOOLS_ICON_MAKER) },
             )
         }
         composable(Routes.TOOLS_SPLITTER) {
@@ -159,6 +161,9 @@ fun KodexNavHost(
         }
         composable(Routes.TOOLS_TRACER) {
             ImageTracerScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.TOOLS_ICON_MAKER) {
+            IconMakerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.TOOLS_KEYSTORE) {
             KeystoreToolScreen(onBack = { navController.popBackStack() })

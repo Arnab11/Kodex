@@ -3,6 +3,7 @@ package com.invictus.kodex.feature.project
 import android.os.Environment
 import com.invictus.kodex.ui.components.expressiveClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
@@ -149,6 +150,11 @@ fun OpenProjectSheet(
     val storageRoot = remember { Environment.getExternalStorageDirectory() }
     var folderResults by remember { mutableStateOf<List<FolderSearchEngine.Result>>(emptyList()) }
     var folderSearching by remember { mutableStateOf(false) }
+    // Build the folder index in the background as soon as the sheet opens, so the first keystroke is instant.
+    LaunchedEffect(state.showHidden) { folderSearchEngine.warmUp(storageRoot, state.showHidden) }
+    val rootLabel = stringResource(R.string.workspace_root_internal)
+    // /storage/emulated/0 is called "0" on disk: show it as Internal storage everywhere.
+    fun displayName(file: File, fallback: String) = if (file.path == storageRoot.path) rootLabel else fallback
     LaunchedEffect(needle, state.showHidden) {
         if (needle.isEmpty()) {
             folderResults = emptyList()
@@ -156,7 +162,7 @@ fun OpenProjectSheet(
             return@LaunchedEffect
         }
         folderSearching = true
-        delay(200) // debounce; naya query aane par purana scan cancel ho jaata hai
+        delay(60) // short debounce: the search runs on an in-memory index now; a new query cancels the old one
         folderResults = folderSearchEngine.search(root = storageRoot, query = needle, showHidden = state.showHidden)
         folderSearching = false
     }
@@ -179,6 +185,10 @@ fun OpenProjectSheet(
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        // Back gesture steps out of the folder (or clears the search) instead of closing the whole sheet.
+        BackHandler(enabled = query.isNotEmpty() || state.browseDir != null) {
+            if (query.isNotEmpty()) query = "" else onEvent(ProjectsEvent.BrowseUp)
+        }
         val sheetFocus = LocalFocusManager.current
         val sheetKeyboard = LocalSoftwareKeyboardController.current
         LaunchedEffect(sheetState) {
@@ -249,8 +259,8 @@ fun OpenProjectSheet(
                 BreadcrumbBar(
                     dir = browsingDir,
                     storageRoot = storageRoot,
-                    onUp = { onEvent(ProjectsEvent.BrowseUp) },
                     onJump = { onEvent(ProjectsEvent.Browse(it)) },
+                    onNewFolder = { onEvent(ProjectsEvent.StartNewFolder(browsingDir)) },
                 )
             }
             val listModifier = if (expandFull) Modifier.weight(1f) else Modifier
@@ -302,7 +312,7 @@ fun OpenProjectSheet(
                         items(items = shortcuts, key = { "s:" + it.file.path }) { shortcut ->
                             FolderRow(
                                 tileColor = shortcutColors[shortcut.file.path],
-                                name = shortcut.label?.asString() ?: shortcut.file.name,
+                                name = displayName(shortcut.file, shortcut.label?.asString() ?: shortcut.file.name),
                                 file = shortcut.file,
                                 onEnter = { onEvent(ProjectsEvent.Browse(shortcut.file)) },
                                 onCopyPath = onCopyPath,
@@ -320,7 +330,7 @@ fun OpenProjectSheet(
                         items(items = entries, key = { "b:" + it.path }) { dir ->
                             FolderRow(
                                 tileColor = entryColors[dir.path],
-                                name = dir.name,
+                                name = displayName(dir, dir.name),
                                 file = dir,
                                 onEnter = { onEvent(ProjectsEvent.Browse(dir)) },
                                 onCopyPath = onCopyPath,
@@ -341,6 +351,7 @@ fun OpenProjectSheet(
     }
 
     ProjectActionDialogs(state = state, onEvent = onEvent)
+    state.newFolder?.let { NewFolderDialog(it, onEvent) }
 
     if (editingShortcuts) {
         EditShortcutsDialog(
@@ -465,7 +476,7 @@ private fun EditShortcutsDialog(
     )
 }
 
-private const val SHEET_HEIGHT_FRACTION = 0.9f
+private const val SHEET_HEIGHT_FRACTION = 0.78f
 
 private fun matches(file: File, needle: String): Boolean =
     needle.isEmpty() || file.name.contains(needle, ignoreCase = true) || file.path.contains(needle, ignoreCase = true)
@@ -571,22 +582,20 @@ private fun crumbsFor(dir: File, storageRoot: File, rootLabel: String): List<Cru
 
 /** Fixed header while browsing: back/up button + a scrollable breadcrumb; the current folder is highlighted. */
 @Composable
-private fun BreadcrumbBar(dir: File, storageRoot: File, onUp: () -> Unit, onJump: (File) -> Unit) {
+private fun BreadcrumbBar(dir: File, storageRoot: File, onJump: (File) -> Unit, onNewFolder: () -> Unit) {
     val rootLabel = stringResource(R.string.workspace_root_internal)
     val crumbs = remember(dir.path) { crumbsFor(dir, storageRoot, rootLabel) }
     val scroll = rememberScrollState()
-    // Keep the current (last) segment in view; only follows layout changes, so manual scrolling is left alone.
-    LaunchedEffect(dir.path) { snapshotFlow { scroll.maxValue }.collect { scroll.scrollTo(it) } }
+    // reverseScrolling anchors the END of the path: the current folder is always visible next to the button,
+    // with no scroll animation. Offset 0 = end, so a new folder simply resets it.
+    LaunchedEffect(dir.path) { scroll.scrollTo(0) }
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
-        Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onUp) {
-                Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
-            }
-            Row(modifier = Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.weight(1f).horizontalScroll(scroll, reverseScrolling = true), verticalAlignment = Alignment.CenterVertically) {
                 crumbs.forEachIndexed { index, crumb ->
                     if (index > 0) {
                         Icon(
@@ -613,6 +622,9 @@ private fun BreadcrumbBar(dir: File, storageRoot: File, onUp: () -> Unit, onJump
                         )
                     }
                 }
+            }
+            IconButton(onClick = onNewFolder) {
+                Icon(XIcons.CreateNewFolder, contentDescription = stringResource(R.string.dialog_new_folder_title))
             }
         }
     }
@@ -928,6 +940,40 @@ private fun RecentRow(
             )
         }
     }
+}
+
+@Composable
+private fun NewFolderDialog(state: NewFolder, onEvent: (ProjectsEvent) -> Unit) {
+    var text by rememberSaveable(state.parent.path) { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val error = state.error
+    AlertDialog(
+        onDismissRequest = { onEvent(ProjectsEvent.DismissNewFolder) },
+        title = { Text(stringResource(R.string.dialog_new_folder_title)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                isError = error != null,
+                supportingText = if (error != null) ({ Text(error.asString()) }) else null,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onEvent(ProjectsEvent.ConfirmNewFolder(text)) }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onEvent(ProjectsEvent.ConfirmNewFolder(text)) }) {
+                Text(stringResource(R.string.action_create))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onEvent(ProjectsEvent.DismissNewFolder) }) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 @Composable

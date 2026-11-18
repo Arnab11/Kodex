@@ -23,6 +23,9 @@ data class ShortcutEntry(val shortcut: BrowseShortcut, val enabled: Boolean, val
 
 data class RenameProject(val file: File, val error: UiText? = null)
 
+/** Pending "new folder inside [parent]" dialog from the browse sheet. */
+data class NewFolder(val parent: File, val error: UiText? = null)
+
 /** Pending "delete project folder from disk" confirmation. */
 data class DeleteProject(val file: File, val deleting: Boolean = false, val error: UiText? = null)
 
@@ -54,6 +57,7 @@ data class ProjectsUiState(
     val browseEntries: List<File> = emptyList(),
     val browseError: UiText? = null,
     val renaming: RenameProject? = null,
+    val newFolder: NewFolder? = null,
     val deleting: DeleteProject? = null,
     val info: ProjectInfo? = null,
     /** Project paths with a backup running right now. */
@@ -79,6 +83,9 @@ sealed interface ProjectsEvent {
     data class StartRename(val file: File) : ProjectsEvent
     data class ConfirmRename(val newName: String) : ProjectsEvent
     data object DismissRename : ProjectsEvent
+    data class StartNewFolder(val parent: File) : ProjectsEvent
+    data class ConfirmNewFolder(val name: String) : ProjectsEvent
+    data object DismissNewFolder : ProjectsEvent
     data class Backup(val file: File) : ProjectsEvent
     data object ToggleShowHidden : ProjectsEvent
     data class SaveShortcuts(val prefs: List<ShortcutPref>) : ProjectsEvent

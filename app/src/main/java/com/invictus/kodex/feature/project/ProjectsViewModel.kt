@@ -13,6 +13,7 @@ import com.invictus.kodex.core.fs.FileOps
 import com.invictus.kodex.core.fs.FsResult
 import com.invictus.kodex.core.project.ProjectBackup
 import com.invictus.kodex.core.project.ProjectRepository
+import com.invictus.kodex.core.search.FolderSearchEngine
 import com.invictus.kodex.feature.workspace.UiText
 import com.invictus.kodex.feature.workspace.toUiText
 import kotlinx.coroutines.CoroutineDispatcher
@@ -110,6 +111,9 @@ class ProjectsViewModel(
                 _uiState.update { it.copy(renaming = RenameProject(event.file)) }
             is ProjectsEvent.ConfirmRename -> confirmRename(event.newName)
             ProjectsEvent.DismissRename -> _uiState.update { it.copy(renaming = null) }
+            is ProjectsEvent.StartNewFolder -> _uiState.update { it.copy(newFolder = NewFolder(event.parent)) }
+            is ProjectsEvent.ConfirmNewFolder -> confirmNewFolder(event.name)
+            ProjectsEvent.DismissNewFolder -> _uiState.update { it.copy(newFolder = null) }
             is ProjectsEvent.Backup -> runBackup(event.file)
             ProjectsEvent.ToggleShowHidden -> toggleShowHidden()
             is ProjectsEvent.SaveShortcuts ->
@@ -224,6 +228,7 @@ class ProjectsViewModel(
             when (val result = fileOps.rename(pending.file, newName)) {
                 is FsResult.Ok -> {
                     projects.onPathMoved(pending.file, result.value)
+                    FolderSearchEngine.invalidate()
                     _uiState.update { it.copy(renaming = null) }
                     _uiState.value.browseDir?.let { browse(it) }
                     val renamed = result.value
@@ -232,6 +237,21 @@ class ProjectsViewModel(
                 }
                 is FsResult.Err ->
                     _uiState.update { it.copy(renaming = pending.copy(error = result.toUiText())) }
+            }
+        }
+    }
+
+    private fun confirmNewFolder(name: String) {
+        val pending = _uiState.value.newFolder ?: return
+        viewModelScope.launch {
+            when (val result = fileOps.createFolder(pending.parent, name)) {
+                is FsResult.Ok -> {
+                    FolderSearchEngine.invalidate()
+                    _uiState.update { it.copy(newFolder = null) }
+                    // Show it in the list right away.
+                    _uiState.value.browseDir?.let { browse(it) }
+                }
+                is FsResult.Err -> _uiState.update { it.copy(newFolder = pending.copy(error = result.toUiText())) }
             }
         }
     }
@@ -256,6 +276,7 @@ class ProjectsViewModel(
             when (val result = fileOps.delete(pending.file)) {
                 is FsResult.Ok -> {
                     projects.onProjectDeleted(pending.file)
+                    FolderSearchEngine.invalidate()
                     _uiState.update { it.copy(deleting = null) }
                     _uiState.value.browseDir?.let { browse(it) }
                     _effects.send(ProjectsEffect.ProjectDeleted(pending.file))

@@ -22,6 +22,7 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx: Application get() = getApplication()
 
     var termuxInstalled by mutableStateOf(false); private set
+    var isPlayStoreBuild by mutableStateOf(false); private set
     var permissionGranted by mutableStateOf(false); private set
     var probe by mutableStateOf<TermuxProbe?>(null); private set
     var checking by mutableStateOf(false); private set
@@ -66,6 +67,7 @@ class TermuxSetupViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun refresh(userInitiated: Boolean = false) {
         termuxInstalled = TermuxLauncher.isInstalled(ctx)
+        isPlayStoreBuild = termuxInstalled && TermuxLauncher.isPlayStoreBuild(ctx)
         permissionGranted = termuxInstalled && TermuxLauncher.hasPermission(ctx)
         if (!permissionGranted) {
             probe = null

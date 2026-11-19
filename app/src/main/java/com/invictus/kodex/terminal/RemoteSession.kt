@@ -95,7 +95,12 @@ class RemoteSession(
         thread(name = "kodex-term-r$id", isDaemon = true) {
             var s = dial(port, CONNECT_TIMEOUT_MS)
             if (s == null) {
-                main.post { if (!closed) fail(appContext.getString(R.string.terminal_err_no_helper)) }
+                val err = if (com.invictus.kodex.core.external.TermuxLauncher.isPlayStoreBuild(appContext)) {
+                    appContext.getString(R.string.terminal_err_playstore_unsupported)
+                } else {
+                    appContext.getString(R.string.terminal_err_no_helper)
+                }
+                main.post { if (!closed) fail(err) }
                 return@thread
             }
             var input = firstInput

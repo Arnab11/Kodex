@@ -5,6 +5,7 @@
     <string name="terminal_new_tab">New tab</string>
     <string name="terminal_starting">Starting Termux shell…</string>
     <string name="terminal_err_no_helper">Could not reach the Termux shell. Check that Termux is set up and python is installed (Setup), then retry.</string>
+    <string name="terminal_err_playstore_unsupported">The Google Play Store build of Termux is incompatible with Kodex. Please install Termux from GitHub or F-Droid.</string>
     <string name="terminal_err_refused">Termux did not accept the command. Check the Termux setup.</string>
     <string name="terminal_retry">Retry</string>
     <string name="terminal_exited">Session ended</string>

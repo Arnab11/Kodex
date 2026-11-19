@@ -225,8 +225,13 @@ fun WorkspaceScreen(
     // Never forces the setup screen: a problem shows a snackbar with a "Setup" action instead.
     val termuxProblem: () -> Unit = {
         scope.launch {
+            val msg = if (TermuxLauncher.isPlayStoreBuild(context)) {
+                context.getString(R.string.terminal_err_playstore_unsupported)
+            } else {
+                context.getString(R.string.termux_not_ready)
+            }
             val result = snackbarHostState.showSnackbar(
-                message = context.getString(R.string.termux_not_ready),
+                message = msg,
                 actionLabel = context.getString(R.string.termux_setup_action),
                 duration = androidx.compose.material3.SnackbarDuration.Long,
             )

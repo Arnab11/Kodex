@@ -88,6 +88,10 @@ object TerminalHub {
         }
         val token = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         val command = PtydHelper.launchCommand(port, token, session.dir, TerminalPrefs.shell, 80, 24, TerminalPrefs.wakeLock, TerminalPrefs.keepAliveMin)
+        if (TermuxLauncher.isPlayStoreBuild(app)) {
+            session.fail(app.getString(R.string.terminal_err_playstore_unsupported))
+            return
+        }
         if (!TermuxLauncher.startBackground(app, arrayOf("-lc", command), null, null)) {
             session.fail(app.getString(R.string.terminal_err_refused))
             return

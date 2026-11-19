@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -101,8 +102,22 @@ fun EditorScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     navigationIcon: (@Composable () -> Unit)? = null,
+    trailingAction: (@Composable () -> Unit)? = null,
     onOpenTermuxSetup: () -> Unit = {},
 ) {
+    val isTablet = com.invictus.kodex.ui.adaptive.isTabletLayout()
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    var showTerminalSplit by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var isVerticalSplit by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var terminalSplitRatio by androidx.compose.runtime.saveable.rememberSaveable { mutableFloatStateOf(0.6f) }
+
+    LaunchedEffect(isLandscape, isTablet) {
+        if (!isTablet && showTerminalSplit) {
+            isVerticalSplit = isLandscape
+        }
+    }
+
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -217,6 +232,7 @@ fun EditorScreen(
             EditorTopBar(
                 onBack = onBack,
                 navigationIcon = navigationIcon,
+                trailingAction = trailingAction,
                 actions = {
                     HistoryButton(
                         enabled = canUndo,
@@ -292,6 +308,30 @@ fun EditorScreen(
                         enabled = active?.dirty == true,
                     ) {
                         Icon(XIcons.Save, contentDescription = stringResource(R.string.action_save))
+                    }
+                    IconButton(
+                        onClick = {
+                            if (!showTerminalSplit) {
+                                val dir = activePath?.let { File(it).parentFile } ?: viewModel.projectRoot ?: context.filesDir
+                                com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
+                                com.invictus.kodex.terminal.TerminalHub.lastDir = dir
+                                if (com.invictus.kodex.terminal.TerminalHub.tabs.isEmpty()) {
+                                    com.invictus.kodex.terminal.TerminalHub.newTab(context.applicationContext, dir)
+                                }
+                                if (!isTablet) {
+                                    isVerticalSplit = isLandscape
+                                }
+                                showTerminalSplit = true
+                            } else {
+                                showTerminalSplit = false
+                            }
+                        },
+                    ) {
+                        Icon(
+                            XIcons.Terminal,
+                            contentDescription = stringResource(R.string.terminal_title),
+                            tint = if (showTerminalSplit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 },
                 overflow = {
@@ -379,71 +419,51 @@ fun EditorScreen(
                     },
                 )
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                val path = activePath
-                val buffer = activeBuffer
-                if (path != null && buffer != null) {
-                    key(path, activePageIndex ?: 0) {
-                        val previewType = active?.previewType ?: PreviewType.NONE
-                        val previewMode = active?.previewMode ?: PreviewMode.EDITOR
-                        val editorContent: @Composable (Modifier) -> Unit = { m ->
-                            CodeEditorView(
-                                buffer = buffer,
-                                path = path,
-                                jumpToLine = viewModel.jumpToLine,
-                                darkTheme = darkTheme,
-                                textMate = viewModel.textMate,
-                                highlightReady = highlightReady,
-                                themeId = themeId,
-                                autocompleteEnabled = autocompleteEnabled,
-                                magnifierEnabled = magnifierEnabled,
-                                handle = handle,
-                                onEdited = {
-                                    viewModel.onEdited(path)
-                                    if (showFind) findState.editEpoch++
-                                },
-                                onViewState = { line, column, size, scrollX, scrollY ->
-                                    viewModel.onViewState(path, line, column, size, scrollX, scrollY)
-                                },
-                                onHistoryChanged = { historyTick++ },
-                                onExplainSelection = if (AiGate != null) { code ->
-                                    AiEditorRequests.pending.value = AiEditorRequests.explainPrompt(File(path).name, code)
-                                    showAi = true
-                                } else null,
-                                modifier = m,
-                            )
-                        }
-                        // Preview never applies to a paged large file -- PreviewRouter only routes
-                        // markdown/html, and a file that size is never one of those in practice,
-                        // but the guard keeps the two M4/M5 features from ever fighting over `key`.
-                        // The editor / preview / split on its own; the AI panel (when open) is added under it below, so the
-                        // panel shows in every preview mode and the part above just gets shorter.
-                        val body: @Composable (Modifier) -> Unit = { m ->
-                            if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
-                                editorContent(m)
-                            } else if (previewMode == PreviewMode.PREVIEW) {
-                                PreviewPane(
-                                    buffer = buffer,
-                                    previewType = previewType,
-                                    revision = state.activeContentRevision,
-                                    darkTheme = darkTheme,
-                                    projectRoot = viewModel.projectRoot,
-                                    onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
-                                    onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-                                    modifier = m,
-                                )
-                            } else { // SPLIT: editor on top, drag handle, preview below (M5 decision).
-                                BoxWithConstraints(m) {
-                                    val totalHeightPx = with(density) { maxHeight.toPx() }
-                                    var ratio by remember(path) { mutableFloatStateOf(buffer.previewSplitRatio) }
-                                    Column(Modifier.fillMaxSize()) {
-                                        editorContent(Modifier.weight(ratio).fillMaxWidth())
-                                        SplitDragHandle(onClose = { viewModel.onEvent(EditorEvent.ClosePreview(path)) }, onDragDeltaPx = { deltaY ->
-                                            if (totalHeightPx > 0f) {
-                                                ratio = (ratio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
-                                                viewModel.onEvent(EditorEvent.SetSplitRatio(path, ratio))
-                                            }
-                                        })
+            val editorPaneContent: @Composable (Modifier) -> Unit = { m ->
+                Column(modifier = m) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        val path = activePath
+                        val buffer = activeBuffer
+                        if (path != null && buffer != null) {
+                            key(path, activePageIndex ?: 0) {
+                                val previewType = active?.previewType ?: PreviewType.NONE
+                                val previewMode = active?.previewMode ?: PreviewMode.EDITOR
+                                val editorContent: @Composable (Modifier) -> Unit = { mod ->
+                                    CodeEditorView(
+                                        buffer = buffer,
+                                        path = path,
+                                        jumpToLine = viewModel.jumpToLine,
+                                        darkTheme = darkTheme,
+                                        textMate = viewModel.textMate,
+                                        highlightReady = highlightReady,
+                                        themeId = themeId,
+                                        autocompleteEnabled = autocompleteEnabled,
+                                        magnifierEnabled = magnifierEnabled,
+                                        handle = handle,
+                                        onEdited = {
+                                            viewModel.onEdited(path)
+                                            if (showFind) findState.editEpoch++
+                                        },
+                                        onViewState = { line, column, size, scrollX, scrollY ->
+                                            viewModel.onViewState(path, line, column, size, scrollX, scrollY)
+                                        },
+                                        onHistoryChanged = { historyTick++ },
+                                        onExplainSelection = if (AiGate != null) { code ->
+                                            AiEditorRequests.pending.value = AiEditorRequests.explainPrompt(File(path).name, code)
+                                            showAi = true
+                                        } else null,
+                                        modifier = mod,
+                                    )
+                                }
+                                // Preview never applies to a paged large file -- PreviewRouter only routes
+                                // markdown/html, and a file that size is never one of those in practice,
+                                // but the guard keeps the two M4/M5 features from ever fighting over `key`.
+                                // The editor / preview / split on its own; the AI panel (when open) is added under it below, so the
+                                // panel shows in every preview mode and the part above just gets shorter.
+                                val body: @Composable (Modifier) -> Unit = { mod ->
+                                    if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
+                                        editorContent(mod)
+                                    } else if (previewMode == PreviewMode.PREVIEW) {
                                         PreviewPane(
                                             buffer = buffer,
                                             previewType = previewType,
@@ -452,55 +472,126 @@ fun EditorScreen(
                                             projectRoot = viewModel.projectRoot,
                                             onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
                                             onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-                                            modifier = Modifier.weight(1f - ratio).fillMaxWidth(),
+                                            modifier = mod,
                                         )
+                                    } else { // SPLIT: editor on top, drag handle, preview below (M5 decision).
+                                        BoxWithConstraints(mod) {
+                                            val totalHeightPx = with(density) { maxHeight.toPx() }
+                                            var ratio by remember(path) { mutableFloatStateOf(buffer.previewSplitRatio) }
+                                            Column(Modifier.fillMaxSize()) {
+                                                editorContent(Modifier.weight(ratio).fillMaxWidth())
+                                                SplitDragHandle(onClose = { viewModel.onEvent(EditorEvent.ClosePreview(path)) }, onDragDeltaPx = { deltaY ->
+                                                    if (totalHeightPx > 0f) {
+                                                        ratio = (ratio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
+                                                        viewModel.onEvent(EditorEvent.SetSplitRatio(path, ratio))
+                                                    }
+                                                })
+                                                PreviewPane(
+                                                    buffer = buffer,
+                                                    previewType = previewType,
+                                                    revision = state.activeContentRevision,
+                                                    darkTheme = darkTheme,
+                                                    projectRoot = viewModel.projectRoot,
+                                                    onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
+                                                    onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                                                    modifier = Modifier.weight(1f - ratio).fillMaxWidth(),
+                                                )
+                                            }
+                                        }
                                     }
+                                }
+                                val aiGate = AiGate
+                                if (showAi && aiGate != null) {
+                                    // AI split: content on top, drag handle, AI panel below (mirrors the M5 preview split).
+                                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                                        val totalHeightPx = with(density) { maxHeight.toPx() }
+                                        var aiRatio by remember(path) { mutableFloatStateOf(0.5f) }
+                                        Column(Modifier.fillMaxSize()) {
+                                            body(Modifier.weight(aiRatio).fillMaxWidth())
+                                            SplitDragHandle(onClose = { showAi = false }, onDragDeltaPx = { deltaY ->
+                                                if (totalHeightPx > 0f) {
+                                                    aiRatio = (aiRatio + deltaY / totalHeightPx).coerceIn(0.2f, 0.8f)
+                                                }
+                                            })
+                                            Box(Modifier.weight(1f - aiRatio).fillMaxWidth()) {
+                                                aiGate.AiEditorPanel(viewModel, handle, onClose = { showAi = false })
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    body(Modifier.fillMaxSize())
                                 }
                             }
                         }
-                        val aiGate = AiGate
-                        if (showAi && aiGate != null) {
-                            // AI split: content on top, drag handle, AI panel below (mirrors the M5 preview split).
-                            BoxWithConstraints(Modifier.fillMaxSize()) {
-                                val totalHeightPx = with(density) { maxHeight.toPx() }
-                                var aiRatio by remember(path) { mutableFloatStateOf(0.5f) }
-                                Column(Modifier.fillMaxSize()) {
-                                    body(Modifier.weight(aiRatio).fillMaxWidth())
-                                    SplitDragHandle(onClose = { showAi = false }, onDragDeltaPx = { deltaY ->
-                                        if (totalHeightPx > 0f) {
-                                            aiRatio = (aiRatio + deltaY / totalHeightPx).coerceIn(0.2f, 0.8f)
-                                        }
-                                    })
-                                    Box(Modifier.weight(1f - aiRatio).fillMaxWidth()) {
-                                        aiGate.AiEditorPanel(viewModel, handle, onClose = { showAi = false })
-                                    }
-                                }
+                        // Floating AI button (hidden while the AI panel is open and whenever AI is switched off
+                        // in Settings > Advanced). Source Control no longer floats over the editor.
+                        if (AiGate != null && activePath != null && !showAi) {
+                            SmallFloatingActionButton(
+                                onClick = { showAi = true },
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ) {
+                                Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
                             }
-                        } else {
-                            body(Modifier.fillMaxSize())
                         }
                     }
-                }
-                // Floating AI button (hidden while the AI panel is open and whenever AI is switched off
-                // in Settings > Advanced). Source Control no longer floats over the editor.
-                if (AiGate != null && activePath != null && !showAi) {
-                    SmallFloatingActionButton(
-                        onClick = { showAi = true },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
+                    if (activePath != null && symbolBarVisible) {
+                        SymbolBar(
+                            handle = handle,
+                            symbols = symbolBar,
+                            pairCursorEnabled = pairCursorEnabled,
+                            onCustomize = { showSymbolCustomize = true },
+                        )
                     }
                 }
             }
-            if (activePath != null && symbolBarVisible) {
-                SymbolBar(
-                    handle = handle,
-                    symbols = symbolBar,
-                    pairCursorEnabled = pairCursorEnabled,
-                    onCustomize = { showSymbolCustomize = true },
-                )
+
+            if (showTerminalSplit) {
+                val terminalArea: @Composable (Modifier) -> Unit = { m ->
+                    com.invictus.kodex.feature.terminal.TerminalScreen(
+                        onBack = { showTerminalSplit = false },
+                        onOpenSetup = onOpenTermuxSetup,
+                        isSplit = true,
+                        isVerticalSplit = isVerticalSplit,
+                        onToggleSplitOrientation = { isVerticalSplit = !isVerticalSplit },
+                        onCloseSplit = { showTerminalSplit = false },
+                        modifier = m,
+                    )
+                }
+                if (!isVerticalSplit) {
+                    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        val totalHeightPx = with(density) { maxHeight.toPx() }
+                        Column(Modifier.fillMaxSize()) {
+                            editorPaneContent(Modifier.weight(terminalSplitRatio).fillMaxWidth())
+                            com.invictus.kodex.ui.components.HorizontalSplitHandle(
+                                onDragDeltaPx = { deltaY ->
+                                    if (totalHeightPx > 0f) {
+                                        terminalSplitRatio = (terminalSplitRatio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
+                                    }
+                                }
+                            )
+                            terminalArea(Modifier.weight(1f - terminalSplitRatio).fillMaxWidth())
+                        }
+                    }
+                } else {
+                    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        val totalWidthPx = with(density) { maxWidth.toPx() }
+                        Row(Modifier.fillMaxSize()) {
+                            editorPaneContent(Modifier.weight(terminalSplitRatio).fillMaxHeight())
+                            com.invictus.kodex.ui.components.VerticalSplitHandle(
+                                onDragDeltaPx = { deltaX ->
+                                    if (totalWidthPx > 0f) {
+                                        terminalSplitRatio = (terminalSplitRatio + deltaX / totalWidthPx).coerceIn(0.15f, 0.85f)
+                                    }
+                                }
+                            )
+                            terminalArea(Modifier.weight(1f - terminalSplitRatio).fillMaxHeight())
+                        }
+                    }
+                }
+            } else {
+                editorPaneContent(Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
@@ -547,6 +638,7 @@ private fun EditorTopBar(
     pinned: @Composable () -> Unit,
     overflow: @Composable () -> Unit,
     navigationIcon: (@Composable () -> Unit)? = null,
+    trailingAction: (@Composable () -> Unit)? = null,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
@@ -570,6 +662,7 @@ private fun EditorTopBar(
             ) { actions() }
             pinned()
             overflow()
+            trailingAction?.invoke()
         }
     }
 }

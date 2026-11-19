@@ -145,6 +145,7 @@ fun KodexNavHost(
                 onClone = { navController.navigate(Routes.GIT_CLONE) },
                 onOpenTools = { navController.navigate(Routes.TOOLS) },
                 onViewAll = { navController.navigate(Routes.ALL_PROJECTS) },
+                onOpenTerminal = { navController.navigate(Routes.TERMINAL) },
             )
         }
         composable(Routes.TOOLS) {

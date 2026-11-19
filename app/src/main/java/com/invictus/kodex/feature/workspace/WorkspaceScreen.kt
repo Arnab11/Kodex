@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -58,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -119,6 +121,8 @@ fun WorkspaceScreen(
     val projectsState by projectsViewModel.uiState.collectAsStateWithLifecycle()
     val isTablet = isTabletLayout()
     var sidebarCollapsed by rememberSaveable { mutableStateOf(false) }
+    var sidebarOnRight by rememberSaveable { mutableStateOf(false) }
+    var sidebarWidthDp by rememberSaveable { mutableFloatStateOf(320f) }
     val isGitRepo by produceState(false, state.root) {
         value = withContext(Dispatchers.IO) { File(state.root, ".git").isDirectory }
     }
@@ -283,7 +287,11 @@ fun WorkspaceScreen(
         }
     }
 
-    val fileTreeContent: @Composable (onCollapseSidebar: (() -> Unit)?) -> Unit = { onCollapse ->
+    val fileTreeContent: @Composable (
+        onCollapseSidebar: (() -> Unit)?,
+        onToggleSidebarSide: (() -> Unit)?,
+        sidebarOnRight: Boolean,
+    ) -> Unit = { onCollapse, onToggleSide, onRight ->
         Scaffold(
             modifier = modifier,
             topBar = {
@@ -299,6 +307,8 @@ fun WorkspaceScreen(
                     terminalEnabled = TermuxSetupPrefs.enabled(context).value,
                     onOpenSettings = onOpenSettings,
                     onCollapseSidebar = onCollapse,
+                    onToggleSidebarSide = onToggleSide,
+                    sidebarOnRight = onRight,
                 )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -362,7 +372,8 @@ fun WorkspaceScreen(
                             editorState.activePath?.let { editorViewModel.onEvent(EditorEvent.CloseTab(it)) }
                         },
                         onOpenSettings = onOpenSettings,
-                        navigationIcon = showSidebarButton,
+                        navigationIcon = if (!sidebarOnRight) showSidebarButton else null,
+                        trailingAction = if (sidebarOnRight) showSidebarButton else null,
                         onOpenTermuxSetup = onOpenTermuxSetup,
                     )
                 } else {
@@ -372,42 +383,78 @@ fun WorkspaceScreen(
                         onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                         onOpenSettings = onOpenSettings,
                         navigationIcon = showSidebarButton,
+                        sidebarOnRight = sidebarOnRight,
                     )
                 }
             }
         } else {
-            AdaptiveTwoPaneLayout(
-                modifier = Modifier.fillMaxSize(),
-                isDualPane = true,
-                firstPaneWidth = 320.dp,
-                firstPane = {
-                    fileTreeContent { sidebarCollapsed = true }
-                },
-                secondPane = {
-                    if (editorState.tabs.isNotEmpty()) {
-                        EditorScreen(
-                            viewModel = editorViewModel,
-                            onBack = {
-                                editorState.activePath?.let { editorViewModel.onEvent(EditorEvent.CloseTab(it)) }
-                            },
-                            onOpenSettings = onOpenSettings,
-                            navigationIcon = null,
-                            onOpenTermuxSetup = onOpenTermuxSetup,
-                        )
-                    } else {
-                        WorkspaceEmptyEditorPane(
-                            projectRoot = state.root,
-                            onOpenSearch = { onOpenCodeSearch(state.root) },
-                            onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
-                            onOpenSettings = onOpenSettings,
-                            navigationIcon = null,
-                        )
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val screenWidth = configuration.screenWidthDp.toFloat()
+            val maxSidebarWidth = (screenWidth * 0.65f).coerceAtLeast(260f)
+            val density = androidx.compose.ui.platform.LocalDensity.current
+
+            val sidebarPane = @Composable {
+                fileTreeContent(
+                    { sidebarCollapsed = true },
+                    { sidebarOnRight = !sidebarOnRight },
+                    sidebarOnRight,
+                )
+            }
+            val editorPane = @Composable {
+                if (editorState.tabs.isNotEmpty()) {
+                    EditorScreen(
+                        viewModel = editorViewModel,
+                        onBack = {
+                            editorState.activePath?.let { editorViewModel.onEvent(EditorEvent.CloseTab(it)) }
+                        },
+                        onOpenSettings = onOpenSettings,
+                        navigationIcon = null,
+                        onOpenTermuxSetup = onOpenTermuxSetup,
+                    )
+                } else {
+                    WorkspaceEmptyEditorPane(
+                        projectRoot = state.root,
+                        onOpenSearch = { onOpenCodeSearch(state.root) },
+                        onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
+                        onOpenSettings = onOpenSettings,
+                        navigationIcon = null,
+                        sidebarOnRight = sidebarOnRight,
+                    )
+                }
+            }
+
+            Row(Modifier.fillMaxSize()) {
+                if (!sidebarOnRight) {
+                    Box(Modifier.width(sidebarWidthDp.dp).fillMaxHeight()) {
+                        sidebarPane()
                     }
-                },
-            )
+                    com.invictus.kodex.ui.components.VerticalSplitHandle(
+                        onDragDeltaPx = { deltaPx ->
+                            val deltaDp = with(density) { deltaPx.toDp() }
+                            sidebarWidthDp = (sidebarWidthDp + deltaDp.value).coerceIn(200f, maxSidebarWidth)
+                        }
+                    )
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        editorPane()
+                    }
+                } else {
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        editorPane()
+                    }
+                    com.invictus.kodex.ui.components.VerticalSplitHandle(
+                        onDragDeltaPx = { deltaPx ->
+                            val deltaDp = with(density) { deltaPx.toDp() }
+                            sidebarWidthDp = (sidebarWidthDp - deltaDp.value).coerceIn(200f, maxSidebarWidth)
+                        }
+                    )
+                    Box(Modifier.width(sidebarWidthDp.dp).fillMaxHeight()) {
+                        sidebarPane()
+                    }
+                }
+            }
         }
     } else {
-        fileTreeContent(null)
+        fileTreeContent(null, null, false)
     }
 
     TreeDialogHost(dialog = state.dialog, onEvent = viewModel::onEvent)
@@ -460,6 +507,8 @@ private fun WorkspaceTopBar(
     terminalEnabled: Boolean = false,
     onOpenSettings: () -> Unit = {},
     onCollapseSidebar: (() -> Unit)? = null,
+    onToggleSidebarSide: (() -> Unit)? = null,
+    sidebarOnRight: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
@@ -538,6 +587,28 @@ private fun WorkspaceTopBar(
                             onEvent(FileTreeEvent.CollapseAll)
                         },
                     )
+                    if (onToggleSidebarSide != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (sidebarOnRight) R.string.sidebar_move_left
+                                        else R.string.sidebar_move_right
+                                    )
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    if (sidebarOnRight) XIcons.DockLeft else XIcons.DockRight,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onToggleSidebarSide()
+                            },
+                        )
+                    }
                     if (terminalEnabled) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.menu_terminal)) },
@@ -646,6 +717,7 @@ private fun WorkspaceEmptyEditorPane(
     onOpenGit: (() -> Unit)?,
     onOpenSettings: () -> Unit,
     navigationIcon: (@Composable () -> Unit)? = null,
+    sidebarOnRight: Boolean = false,
 ) {
     Box(
         modifier = Modifier
@@ -664,8 +736,9 @@ private fun WorkspaceEmptyEditorPane(
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .height(56.dp)
-                        .padding(start = 4.dp),
+                        .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (sidebarOnRight) Arrangement.End else Arrangement.Start,
                 ) {
                     navigationIcon()
                 }

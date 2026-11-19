@@ -91,6 +91,36 @@ object IconExporter {
         return written
     }
 
+    private val NOTIF_DENSITIES = listOf("mdpi" to 24, "hdpi" to 36, "xhdpi" to 48, "xxhdpi" to 72, "xxxhdpi" to 96)
+
+    /** A valid, lowercase Android resource name; falls back to ic_stat_notify. */
+    fun resourceName(raw: String): String {
+        val n = raw.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_").trim('_')
+        return when {
+            n.isEmpty() -> "ic_stat_notify"
+            n.first().isDigit() -> "ic_stat_$n"
+            else -> n
+        }
+    }
+
+    /** Notification small icons: res/drawable-<density>/<name>.png at 24/36/48/72/96px. */
+    fun writeNotification(main: File, spec: IconSpec, notif: NotifSpec, displayRoot: File = main): List<String> {
+        val name = resourceName(notif.name)
+        val written = ArrayList<String>()
+        for ((dpi, px) in NOTIF_DENSITIES) {
+            val dir = File(main, "res/drawable-$dpi")
+            dir.mkdirs()
+            File(dir, "$name.xml").delete()
+            File(dir, "$name.webp").delete()
+            val f = File(dir, "$name.png")
+            val bmp = IconRenderer.notification(spec, notif, px)
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bmp.recycle()
+            written += f.relativeTo(displayRoot).path.replace(File.separatorChar, '/')
+        }
+        return written
+    }
+
     /** Zips [dir]'s contents (paths relative to it) into [zip]. */
     fun zip(dir: File, zip: File) {
         ZipOutputStream(zip.outputStream().buffered()).use { out ->

@@ -14,11 +14,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
 import com.invictus.kodex.ai.agent.AppIconApplier
+import com.invictus.kodex.core.iconmaker.BgKind
+import com.invictus.kodex.core.iconmaker.BrandLooks
 import com.invictus.kodex.core.iconmaker.GlyphKind
 import com.invictus.kodex.core.iconmaker.IconExporter
 import com.invictus.kodex.core.iconmaker.IconRenderer
-import com.invictus.kodex.core.iconmaker.IconShape
 import com.invictus.kodex.core.iconmaker.IconSpec
+import com.invictus.kodex.core.iconmaker.NotifSpec
 import com.invictus.kodex.core.iconmaker.SymbolLibrary
 import com.invictus.kodex.core.project.ProjectRepository
 import java.io.File
@@ -34,9 +36,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+enum class MakerMode { App, Notification }
+
 /**
- * Icon maker: edits an [IconSpec], renders the three adaptive layers for the previews (off the main thread,
- * a newer edit cancels the one in flight) and exports / applies them with [IconExporter].
+ * Icon maker: edits an [IconSpec] (launcher icon) and a [NotifSpec] (status-bar icon) that share one glyph,
+ * renders what the previews need off the main thread (a newer edit cancels the one in flight) and exports /
+ * applies the result with [IconExporter].
  */
 class IconMakerViewModel(
     private val app: Application,
@@ -48,9 +53,14 @@ class IconMakerViewModel(
     class Target(val root: File, val name: String)
 
     data class UiState(
+        val mode: MakerMode = MakerMode.App,
         val spec: IconSpec = IconSpec(),
+        val notif: NotifSpec = NotifSpec(),
         val layers: Layers? = null,
+        /** White-on-transparent notification glyph (96px). */
+        val notifGlyph: ImageBitmap? = null,
         val symbols: List<SymbolLibrary.Symbol> = emptyList(),
+        val brands: List<SymbolLibrary.Symbol> = emptyList(),
         val symbolsLoading: Boolean = true,
         val hasPicture: Boolean = false,
         val busy: Boolean = false,
@@ -64,27 +74,68 @@ class IconMakerViewModel(
     private val _effects = Channel<String>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
-    private val specFlow = MutableStateFlow(IconSpec())
+    /** [rev] changes when glyph data finishes loading, so an unchanged spec still gets redrawn. */
+    private data class Inputs(val spec: IconSpec, val notif: NotifSpec, val rev: Int = 0)
+
+    private val inputs = MutableStateFlow(Inputs(IconSpec(), NotifSpec()))
 
     init {
         viewModelScope.launch {
             val symbols = SymbolLibrary.load(app)
             _ui.update { it.copy(symbols = symbols, symbolsLoading = false) }
-            // Glyph paths are available now: draw again.
-            specFlow.value = specFlow.value.copy()
+            redraw()
         }
         viewModelScope.launch {
-            specFlow.collectLatest { spec ->
-                val layers = withContext(Dispatchers.Default) { render(spec) }
-                _ui.update { it.copy(layers = layers) }
+            val brands = SymbolLibrary.loadBrands(app)
+            _ui.update { it.copy(brands = brands) }
+            redraw()
+        }
+        viewModelScope.launch {
+            inputs.collectLatest { i ->
+                val (layers, glyph) = withContext(Dispatchers.Default) { render(i) }
+                _ui.update { it.copy(layers = layers, notifGlyph = glyph) }
             }
         }
     }
 
+    private fun redraw() = inputs.update { it.copy(rev = it.rev + 1) }
+
+    fun setMode(mode: MakerMode) = _ui.update { it.copy(mode = mode) }
+
     fun edit(block: IconSpec.() -> IconSpec) {
         val next = _ui.value.spec.block()
         _ui.update { it.copy(spec = next) }
-        specFlow.value = next
+        inputs.update { it.copy(spec = next) }
+    }
+
+    fun editNotif(block: NotifSpec.() -> NotifSpec) {
+        val next = _ui.value.notif.block()
+        _ui.update { it.copy(notif = next) }
+        inputs.update { it.copy(notif = next) }
+    }
+
+    /** Picks a brand logo and dresses it like the real app icon (or in another [style]). */
+    fun useBrand(symbol: SymbolLibrary.Symbol, style: BrandLooks.Style = BrandLooks.Style.Original) {
+        val look = BrandLooks.look(symbol, style)
+        edit {
+            copy(
+                kind = GlyphKind.Symbol,
+                symbol = symbol.name,
+                fgColor = look.fg,
+                bgKind = if (look.bg2 != null) BgKind.Gradient else BgKind.Solid,
+                bg1 = look.bg1,
+                bg2 = look.bg2 ?: bg2,
+                bgAngle = look.angle,
+                sizePct = look.sizePct,
+                offsetXPct = 0,
+                offsetYPct = 0,
+            )
+        }
+    }
+
+    /** Re-dresses the currently selected brand logo. */
+    fun brandStyle(style: BrandLooks.Style) {
+        SymbolLibrary.get(_ui.value.spec.symbol)?.takeIf { it.isBrand }?.let { useBrand(it, style) }
     }
 
     fun setPicture(uri: Uri) {
@@ -119,29 +170,35 @@ class IconMakerViewModel(
     fun applyTo(target: Target) {
         dismissTargets()
         runBusy {
-            val spec = _ui.value.spec
+            val s = _ui.value
             val result = runCatching {
                 val main = AppIconApplier.findMain(target.root) ?: error("No Android app module")
-                IconExporter.write(main, spec, target.root)
+                if (s.mode == MakerMode.App) IconExporter.write(main, s.spec, target.root)
+                else IconExporter.writeNotification(main, s.spec, s.notif, target.root)
             }
             _effects.send(
                 result.fold(
-                    onSuccess = { app.getString(R.string.im_applied, it.size, target.name) },
+                    onSuccess = {
+                        if (s.mode == MakerMode.App) app.getString(R.string.im_applied, it.size, target.name)
+                        else app.getString(R.string.im_notif_applied, it.size, target.name, IconExporter.resourceName(s.notif.name))
+                    },
                     onFailure = { app.getString(R.string.im_apply_failed, it.message ?: it.javaClass.simpleName) },
                 ),
             )
         }
     }
 
-    /** res/ + Play Store icon as a ZIP in Download/Kodex, ready to copy over a project's src/main. */
+    /** res/ (+ Play Store icon) as a ZIP in Download/Kodex, ready to copy over a project's src/main. */
     fun saveZip() {
         runBusy {
-            val spec = _ui.value.spec
-            val name = "Kodex-icon-${System.currentTimeMillis() / 1000}.zip"
-            val dir = File(app.cacheDir, "iconmaker/${System.currentTimeMillis()}")
+            val s = _ui.value
+            val stamp = System.currentTimeMillis()
+            val name = (if (s.mode == MakerMode.App) "Kodex-icon-" else "Kodex-notification-icon-") + "${stamp / 1000}.zip"
+            val dir = File(app.cacheDir, "iconmaker/$stamp")
             val zip = File(app.cacheDir, "iconmaker/$name")
             val ok = runCatching {
-                IconExporter.write(dir, spec)
+                if (s.mode == MakerMode.App) IconExporter.write(dir, s.spec)
+                else IconExporter.writeNotification(dir, s.spec, s.notif)
                 IconExporter.zip(dir, zip)
                 AppIconApplier.saveToDevice(app, zip, name, "application/zip")
             }.getOrDefault(false)
@@ -162,11 +219,12 @@ class IconMakerViewModel(
         }
     }
 
-    private fun render(spec: IconSpec): Layers {
-        val bg = IconRenderer.background(spec)
-        val fg = IconRenderer.foreground(spec)
-        val mono = IconRenderer.foreground(spec, mono = true)
-        return Layers(bg.asImageBitmap(), fg.asImageBitmap(), mono.asImageBitmap())
+    private fun render(i: Inputs): Pair<Layers, ImageBitmap> {
+        val bg = IconRenderer.background(i.spec)
+        val fg = IconRenderer.foreground(i.spec)
+        val mono = IconRenderer.foreground(i.spec, mono = true)
+        val glyph = IconRenderer.notification(i.spec, i.notif, 96)
+        return Layers(bg.asImageBitmap(), fg.asImageBitmap(), mono.asImageBitmap()) to glyph.asImageBitmap()
     }
 
     private fun decode(uri: Uri): Bitmap? = runCatching {

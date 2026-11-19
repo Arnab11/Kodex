@@ -108,6 +108,26 @@ object IconRenderer {
         return bmp
     }
 
+    /**
+     * Status-bar small icon: the glyph in opaque white on a transparent [px] square (Android only reads the
+     * alpha and tints it), centred with [notif]'s size and offsets.
+     */
+    fun notification(spec: IconSpec, notif: NotifSpec, px: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val box = px * notif.sizePct / 100f
+        val cx = px / 2f + px * notif.offsetXPct / 100f
+        val cy = px / 2f + px * notif.offsetYPct / 100f
+        val rect = RectF(cx - box / 2f, cy - box / 2f, cx + box / 2f, cy + box / 2f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = Color.WHITE }
+        when (spec.kind) {
+            GlyphKind.Symbol -> SymbolLibrary.path(spec.symbol)?.let { drawSymbol(c, it, rect, paint) }
+            GlyphKind.Text -> drawText(c, spec.text, rect, paint)
+            GlyphKind.Picture -> spec.picture?.let { drawPicture(c, it, rect, spec, mono = true) }
+        }
+        return bmp
+    }
+
     /** A finished launcher icon: the visible 72dp window of both layers, cut by [shape]. */
     fun composite(bg: Bitmap, fg: Bitmap, shape: IconShape, outPx: Int): Bitmap {
         val out = Bitmap.createBitmap(outPx, outPx, Bitmap.Config.ARGB_8888)

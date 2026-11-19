@@ -258,4 +258,26 @@
     <string name="im_zip_failed">Couldn\'t save the ZIP</string>
     <string name="im_applied">Updated %1$d files in %2$s. Rebuild to see the new icon.</string>
     <string name="im_apply_failed">Couldn\'t write the icon: %1$s</string>
+    <string name="im_mode_app">App icon</string>
+    <string name="im_mode_notif">Notification</string>
+    <string name="im_tab_icon">Icon</string>
+    <string name="im_tab_color">Color</string>
+    <string name="im_tab_background">Background</string>
+    <string name="im_tab_layout">Layout</string>
+    <string name="im_tab_details">Details</string>
+    <string name="im_src_icons">Icons</string>
+    <string name="im_src_brands">Brands</string>
+    <string name="im_search_brands">Search %1$d brands</string>
+    <string name="im_brand_original">Original look</string>
+    <string name="im_brand_color">Brand color</string>
+    <string name="im_brand_white">White</string>
+    <string name="im_brand_black">Black</string>
+    <string name="im_image_hint">Your image is used as the icon. Transparent PNGs work best.</string>
+    <string name="im_notif_name">Resource name</string>
+    <string name="im_notif_hint">Saved as a white-on-transparent glyph in drawable-mdpi … xxxhdpi (24–96px). Android tints it; use it with setSmallIcon(R.drawable.name).</string>
+    <string name="im_notif_accent">Accent color (preview only)</string>
+    <string name="im_notif_title">Notification title</string>
+    <string name="im_notif_body">Your small icon shows up here</string>
+    <string name="im_notif_sizes">24 / 36 / 48dp</string>
+    <string name="im_notif_applied">Wrote %1$d notification icons to %2$s. Use R.drawable.%3$s with setSmallIcon.</string>
 </resources>

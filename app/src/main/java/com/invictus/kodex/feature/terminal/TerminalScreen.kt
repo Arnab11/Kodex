@@ -180,9 +180,20 @@ fun TerminalScreen(
             scope.launch { snackbar.showSnackbar(app.getString(R.string.terminal_tab_limit, TerminalPrefs.maxTabs)) }
         }
     }
+    // The focused TerminalView keeps the IME up for a moment after the screen is popped: drop it first.
+    fun hideKeyboard() {
+        termView?.let { v ->
+            v.clearFocus()
+            v.context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(v.windowToken, 0)
+        }
+    }
+    fun leave() {
+        hideKeyboard()
+        onBack()
+    }
     fun closeTab(tab: TerminalHub.Tab) {
         TerminalHub.close(tab)
-        if (TerminalHub.tabs.isEmpty()) onBack()
+        if (TerminalHub.tabs.isEmpty()) leave()
     }
 
     Scaffold(
@@ -192,7 +203,7 @@ fun TerminalScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.terminal_title)) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = ::leave) { Icon(XIcons.ArrowBack, null) } },
                 actions = {
                     IconButton(onClick = { runOpen = true }, enabled = selected != null) {
                         Icon(XIcons.PlayArrow, stringResource(R.string.terminal_set_run_group))

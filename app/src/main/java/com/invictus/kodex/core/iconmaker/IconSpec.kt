@@ -29,3 +29,14 @@ data class IconSpec(
     /** Mask for the legacy PNGs; also the mask the previews use. */
     val legacyShape: IconShape = IconShape.Rounded,
 )
+
+/** Status-bar / notification small icon: the same glyph, white on transparent, exported per density. */
+data class NotifSpec(
+    val name: String = "ic_stat_notify",
+    /** Glyph box as a percentage of the icon canvas. */
+    val sizePct: Int = 86,
+    val offsetXPct: Int = 0,
+    val offsetYPct: Int = 0,
+    /** Only used by the previews (what setColor() would tint the icon with). */
+    val accent: Int = 0xFF7C4DFF.toInt(),
+)

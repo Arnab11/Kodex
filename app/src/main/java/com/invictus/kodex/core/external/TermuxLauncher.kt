@@ -20,6 +20,7 @@ object TermuxLauncher {
     const val PACKAGE = "com.termux"
     const val PERMISSION = "com.termux.permission.RUN_COMMAND"
     const val RELEASES_URL = "https://github.com/termux/termux-app/releases"
+    const val FDROID_URL = "https://f-droid.org/packages/com.termux/"
 
     private const val ACTION = "com.termux.RUN_COMMAND"
     private const val SERVICE = "com.termux.app.RunCommandService"
@@ -27,6 +28,27 @@ object TermuxLauncher {
 
     fun isInstalled(context: Context): Boolean =
         runCatching { context.packageManager.getPackageInfo(PACKAGE, 0) }.isSuccess
+
+    /** Detects if the installed Termux is the obsolete Google Play Store release (v0.101 or older). */
+    fun isPlayStoreBuild(context: Context): Boolean = runCatching {
+        val info = context.packageManager.getPackageInfo(PACKAGE, 0)
+        @Suppress("DEPRECATION")
+        val versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
+        val installer = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(PACKAGE).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(PACKAGE)
+            }
+        }.getOrNull()
+
+        versionCode <= 101L || installer == "com.android.vending"
+    }.getOrDefault(false)
 
     fun hasPermission(context: Context): Boolean =
         context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
@@ -151,6 +173,12 @@ done
     fun openReleasesPage(context: Context) {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    fun openFdroidPage(context: Context) {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(FDROID_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
 }

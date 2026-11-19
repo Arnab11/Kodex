@@ -71,4 +71,8 @@
     <string name="termux_run_truncated">Showing the last %1$d characters.</string>
     <string name="termux_run_running">Running… %1$s s</string>
     <string name="termux_run_took">%1$s s</string>
+    <string name="termux_playstore_warning_title">Play Store version of Termux is incompatible</string>
+    <string name="termux_playstore_warning_desc">The Google Play Store build of Termux has been abandoned since 2020 and cannot install packages or run background commands needed by Kodex. Please uninstall it and install the official build from GitHub or F-Droid.</string>
+    <string name="termux_get_github">GitHub</string>
+    <string name="termux_get_fdroid">F-Droid</string>
 </resources>

@@ -448,11 +448,27 @@ private fun StatusOverlay(
             }
         }
         RemoteSession.State.FAILED -> Box(Modifier.fillMaxSize().background(bg).padding(24.dp), contentAlignment = Alignment.Center) {
+            val context = LocalContext.current
+            val isPlayStore = TermuxLauncher.isPlayStoreBuild(context)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(session.message.orEmpty(), color = fg, style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onRetry) { Text(stringResource(R.string.terminal_retry)) }
-                OutlinedButton(onClick = onSetup) { Text(stringResource(R.string.termux_setup_action)) }
-                TextButton(onClick = onOpenTermux) { Text(stringResource(R.string.terminal_open_termux)) }
+                Text(
+                    session.message.orEmpty(),
+                    color = fg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                if (isPlayStore) {
+                    Button(onClick = { TermuxLauncher.openReleasesPage(context) }) {
+                        Text(stringResource(R.string.termux_get_github))
+                    }
+                    OutlinedButton(onClick = { TermuxLauncher.openFdroidPage(context) }) {
+                        Text(stringResource(R.string.termux_get_fdroid))
+                    }
+                } else {
+                    Button(onClick = onRetry) { Text(stringResource(R.string.terminal_retry)) }
+                    OutlinedButton(onClick = onSetup) { Text(stringResource(R.string.termux_setup_action)) }
+                    TextButton(onClick = onOpenTermux) { Text(stringResource(R.string.terminal_open_termux)) }
+                }
             }
         }
         RemoteSession.State.EXITED -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {

@@ -133,8 +133,13 @@ fun EditorScreen(
     // "Run file": saves, then runs the active file in a visible Termux session (same folder).
     val termuxProblem: () -> Unit = {
         scope.launch {
+            val msg = if (com.invictus.kodex.core.external.TermuxLauncher.isPlayStoreBuild(context)) {
+                context.getString(R.string.terminal_err_playstore_unsupported)
+            } else {
+                context.getString(R.string.termux_not_ready)
+            }
             val result = snackbarHostState.showSnackbar(
-                message = context.getString(R.string.termux_not_ready),
+                message = msg,
                 actionLabel = context.getString(R.string.termux_setup_action),
             )
             if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenTermuxSetup()

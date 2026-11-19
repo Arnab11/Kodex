@@ -1582,4 +1582,10 @@
     <string name="clone_notif_done_title">Clone complete</string>
     <string name="clone_notif_done_text">%1$s cloned to %2$s</string>
     <string name="clone_notif_failed_title">Clone failed</string>
+
+    <!-- Tablet split & sidebar options -->
+    <string name="sidebar_move_right">Move sidebar to right</string>
+    <string name="sidebar_move_left">Move sidebar to left</string>
+    <string name="terminal_split_horizontal">Switch to horizontal split</string>
+    <string name="terminal_split_vertical">Switch to vertical split</string>
 </resources>

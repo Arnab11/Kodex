@@ -139,6 +139,7 @@ fun HomeScreen(
     onClone: () -> Unit = {},
     onOpenTools: () -> Unit = {},
     onViewAll: () -> Unit = {},
+    onOpenTerminal: () -> Unit = {},
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = viewModel(factory = ProjectsViewModel.Factory),
     fileTreeViewModel: FileTreeViewModel = viewModel(factory = FileTreeViewModel.Factory),
@@ -247,6 +248,10 @@ fun HomeScreen(
                         }
                         HeaderIconButton(onClick = onClone) {
                             Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        HeaderIconButton(onClick = onOpenTerminal) {
+                            Icon(XIcons.Terminal, contentDescription = stringResource(R.string.menu_terminal))
                         }
                         Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {

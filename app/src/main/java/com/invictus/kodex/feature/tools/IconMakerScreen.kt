@@ -33,11 +33,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -59,37 +58,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.core.iconmaker.BgKind
-import com.invictus.kodex.core.iconmaker.BrandLooks
 import com.invictus.kodex.core.iconmaker.GlyphKind
-import com.invictus.kodex.core.iconmaker.IconShape
+import com.invictus.kodex.core.iconmaker.IconSpec
 import com.invictus.kodex.core.iconmaker.SymbolLibrary
 import com.invictus.kodex.ui.icons.XIcons
 
 private const val GRID_COLUMNS = 7
-private const val BRAND_COLUMNS = 4
 
 private enum class EditorTab(val label: Int) {
     Icon(R.string.im_tab_icon),
-    Color(R.string.im_tab_color),
-    Background(R.string.im_tab_background),
-    Layout(R.string.im_tab_layout),
-    Details(R.string.im_tab_details),
+    Colors(R.string.im_tab_colors),
+    Size(R.string.im_tab_size),
+    Name(R.string.im_tab_name),
 }
 
-private val APP_TABS = listOf(EditorTab.Icon, EditorTab.Color, EditorTab.Background, EditorTab.Layout)
-private val NOTIF_TABS = listOf(EditorTab.Icon, EditorTab.Layout, EditorTab.Details)
+private val APP_TABS = listOf(EditorTab.Icon, EditorTab.Colors, EditorTab.Size)
+private val NOTIF_TABS = listOf(EditorTab.Icon, EditorTab.Size, EditorTab.Name)
 
 private val SUGGESTED = listOf(
     "bolt", "home", "favorite", "star", "code", "terminal", "folder", "photo-camera", "music-note", "mail",
@@ -104,6 +99,21 @@ private val SWATCHES = listOf(
     0xFFFFFFFF, 0xFF000000, 0xFF7C4DFF, 0xFF3D2BC4, 0xFF2563EB, 0xFF0EA5E9, 0xFF10B981, 0xFF84CC16,
     0xFFF5A524, 0xFFF97316, 0xFFEF4444, 0xFFEC4899, 0xFF64748B, 0xFF1E293B,
 ).map { it.toInt() }
+
+/** Ready-made looks: icon color + background in one tap. */
+private class QuickStyle(val fg: Int, val bg1: Int, val bg2: Int?)
+
+private val QUICK_STYLES = listOf(
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFF7C4DFF.toInt(), 0xFF3D2BC4.toInt()),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFF0EA5E9.toInt(), 0xFF2563EB.toInt()),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFFF97316.toInt(), 0xFFEC4899.toInt()),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFF34D399.toInt(), 0xFF059669.toInt()),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFFF43F5E.toInt(), 0xFFBE123C.toInt()),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFF1E293B.toInt(), 0xFF0F172A.toInt()),
+    QuickStyle(0xFF111827.toInt(), 0xFFFFFFFF.toInt(), null),
+    QuickStyle(0xFF111827.toInt(), 0xFFFACC15.toInt(), null),
+    QuickStyle(0xFFFFFFFF.toInt(), 0xFF000000.toInt(), null),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,144 +130,137 @@ fun IconMakerScreen(
         if (uri != null) viewModel.setPicture(uri)
     }
     var preview by rememberSaveable { mutableStateOf(PreviewMode.Home) }
-    var tabIndex by rememberSaveable(state.mode) { mutableStateOf(0) }
+    var tab by rememberSaveable(state.mode) { mutableStateOf(EditorTab.Icon) }
     val tabs = if (isApp) APP_TABS else NOTIF_TABS
-    val tab = tabs[tabIndex.coerceIn(0, tabs.lastIndex)]
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = isApp,
-                            onClick = { viewModel.setMode(MakerMode.App) },
-                            label = { Text(stringResource(R.string.im_mode_app)) },
-                        )
-                        FilterChip(
-                            selected = !isApp,
-                            onClick = { viewModel.setMode(MakerMode.Notification) },
-                            label = { Text(stringResource(R.string.im_mode_notif)) },
-                        )
-                    }
-                },
+                title = { Text(stringResource(R.string.tools_iconmaker_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back)) }
                 },
             )
         },
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilledTonalButton(onClick = viewModel::saveZip, enabled = !state.busy, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.im_save_zip), maxLines = 1)
-                    }
-                    Button(onClick = viewModel::requestApply, enabled = !state.busy, modifier = Modifier.weight(1f)) {
-                        if (state.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Text(stringResource(R.string.im_apply), maxLines = 1)
-                    }
-                }
-            }
-        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // Pinned: the preview stays visible while you edit below it; only the tab body scrolls.
-            if (isApp) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (m in PreviewMode.entries) {
-                        FilterChip(selected = preview == m, onClick = { preview = m }, label = { Text(previewModeLabel(m)) })
+            PillTabs(
+                items = listOf(MakerMode.App to R.string.im_mode_app, MakerMode.Notification to R.string.im_mode_notif),
+                selected = state.mode,
+                onSelect = viewModel::setMode,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+
+            // The preview never scrolls away while you edit.
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 8.dp)) {
+                    if (isApp) {
+                        IconPreview(
+                            mode = preview,
+                            layers = state.layers,
+                            shape = spec.legacyShape,
+                            onShape = { s -> viewModel.edit { copy(legacyShape = s) } },
+                        )
+                        PillTabs(
+                            items = PreviewMode.entries.map { it to it.label },
+                            selected = preview,
+                            onSelect = { preview = it },
+                            scrollable = true,
+                            compact = true,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        )
+                    } else {
+                        Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT + 24.dp)) {
+                            NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
+                        }
                     }
-                }
-                IconPreview(
-                    mode = preview,
-                    layers = state.layers,
-                    shape = spec.legacyShape,
-                    onShape = { s -> viewModel.edit { copy(legacyShape = s) } },
-                    brandsReady = state.brands.isNotEmpty(),
-                )
-            } else {
-                Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT + 40.dp)) {
-                    NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
                 }
             }
-            HorizontalDivider()
-            EditorTabs(tabs, tab) { tabIndex = tabs.indexOf(it) }
-            HorizontalDivider()
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (tab) {
-                    EditorTab.Icon -> IconTab(state, viewModel) { picker.launch("image/*") }
-                    EditorTab.Color -> Panel {
-                        Label(R.string.im_section_fg)
-                        ColorEditor(spec.fgColor) { c -> viewModel.edit { copy(fgColor = c) } }
-                        if (spec.kind == GlyphKind.Picture) {
-                            SwitchRow(R.string.im_tint_image, spec.tintPicture) { viewModel.edit { copy(tintPicture = it) } }
+            // Editor sheet: tabs on top, only the body below them scrolls.
+            Surface(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    EditorTabs(tabs, tab) { tab = it }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when (tab) {
+                            EditorTab.Icon -> IconTab(state, viewModel) { picker.launch("image/*") }
+                            EditorTab.Colors -> Panel {
+                                SectionTitle(R.string.im_quick_styles)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    items(QUICK_STYLES) { q -> QuickStyleTile(q) { viewModel.applyStyle(q.fg, q.bg1, q.bg2) } }
+                                }
+                                SectionTitle(R.string.im_section_icon_color)
+                                ColorEditor(spec.fgColor) { c -> viewModel.edit { copy(fgColor = c) } }
+                                if (spec.kind == GlyphKind.Picture) {
+                                    SwitchRow(R.string.im_tint_image, spec.tintPicture) { viewModel.edit { copy(tintPicture = it) } }
+                                }
+                                SectionTitle(R.string.im_section_bg)
+                                PillTabs(
+                                    items = listOf(BgKind.Solid to R.string.im_bg_solid, BgKind.Gradient to R.string.im_bg_gradient),
+                                    selected = spec.bgKind,
+                                    onSelect = { k -> viewModel.edit { copy(bgKind = k) } },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                ColorEditor(spec.bg1) { c -> viewModel.edit { copy(bg1 = c) } }
+                                if (spec.bgKind == BgKind.Gradient) {
+                                    Label(R.string.im_bg_color2)
+                                    ColorEditor(spec.bg2) { c -> viewModel.edit { copy(bg2 = c) } }
+                                    ValueSlider(
+                                        label = stringResource(R.string.im_bg_angle_label),
+                                        value = "${spec.bgAngle}°",
+                                        position = spec.bgAngle / 45f,
+                                        range = 0f..7f,
+                                        steps = 6,
+                                    ) { v -> viewModel.edit { copy(bgAngle = (v.toInt() * 45) % 360) } }
+                                }
+                            }
+                            EditorTab.Size -> Panel {
+                                if (isApp) {
+                                    IntSlider(R.string.im_size, spec.sizePct, 30..130) { viewModel.edit { copy(sizePct = it) } }
+                                    IntSlider(R.string.im_offset_x, spec.offsetXPct, -30..30) { viewModel.edit { copy(offsetXPct = it) } }
+                                    IntSlider(R.string.im_offset_y, spec.offsetYPct, -30..30) { viewModel.edit { copy(offsetYPct = it) } }
+                                    SwitchRow(R.string.im_shadow, spec.shadow) { viewModel.edit { copy(shadow = it) } }
+                                    TextButton(onClick = { viewModel.edit { copy(sizePct = 80, offsetXPct = 0, offsetYPct = 0) } }) {
+                                        Text(stringResource(R.string.im_reset))
+                                    }
+                                } else {
+                                    val n = state.notif
+                                    IntSlider(R.string.im_size, n.sizePct, 40..100) { viewModel.editNotif { copy(sizePct = it) } }
+                                    IntSlider(R.string.im_offset_x, n.offsetXPct, -20..20) { viewModel.editNotif { copy(offsetXPct = it) } }
+                                    IntSlider(R.string.im_offset_y, n.offsetYPct, -20..20) { viewModel.editNotif { copy(offsetYPct = it) } }
+                                    TextButton(onClick = { viewModel.editNotif { copy(sizePct = 86, offsetXPct = 0, offsetYPct = 0) } }) {
+                                        Text(stringResource(R.string.im_reset))
+                                    }
+                                }
+                            }
+                            EditorTab.Name -> Panel {
+                                OutlinedTextField(
+                                    value = state.notif.name,
+                                    onValueChange = { v -> viewModel.editNotif { copy(name = v.take(40)) } },
+                                    singleLine = true,
+                                    label = { Text(stringResource(R.string.im_notif_name)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Text(
+                                    stringResource(R.string.im_notif_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                SectionTitle(R.string.im_notif_accent)
+                                ColorEditor(state.notif.accent) { c -> viewModel.editNotif { copy(accent = c) } }
+                            }
                         }
                     }
-                    EditorTab.Background -> Panel {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = spec.bgKind == BgKind.Solid,
-                                onClick = { viewModel.edit { copy(bgKind = BgKind.Solid) } },
-                                label = { Text(stringResource(R.string.im_bg_solid)) },
-                            )
-                            FilterChip(
-                                selected = spec.bgKind == BgKind.Gradient,
-                                onClick = { viewModel.edit { copy(bgKind = BgKind.Gradient) } },
-                                label = { Text(stringResource(R.string.im_bg_gradient)) },
-                            )
-                        }
-                        Label(R.string.im_bg_color)
-                        ColorEditor(spec.bg1) { c -> viewModel.edit { copy(bg1 = c) } }
-                        if (spec.bgKind == BgKind.Gradient) {
-                            Label(R.string.im_bg_color2)
-                            ColorEditor(spec.bg2) { c -> viewModel.edit { copy(bg2 = c) } }
-                            Text(stringResource(R.string.im_bg_angle, spec.bgAngle), style = MaterialTheme.typography.labelLarge)
-                            Slider(
-                                value = spec.bgAngle / 45f,
-                                onValueChange = { v -> viewModel.edit { copy(bgAngle = (v.toInt() * 45) % 360) } },
-                                valueRange = 0f..7f,
-                                steps = 6,
-                            )
-                        }
-                    }
-                    EditorTab.Layout -> Panel {
-                        if (isApp) {
-                            PercentSlider(R.string.im_size, spec.sizePct, 30..130) { viewModel.edit { copy(sizePct = it) } }
-                            PercentSlider(R.string.im_offset_x, spec.offsetXPct, -30..30) { viewModel.edit { copy(offsetXPct = it) } }
-                            PercentSlider(R.string.im_offset_y, spec.offsetYPct, -30..30) { viewModel.edit { copy(offsetYPct = it) } }
-                            SwitchRow(R.string.im_shadow, spec.shadow) { viewModel.edit { copy(shadow = it) } }
-                        } else {
-                            val n = state.notif
-                            PercentSlider(R.string.im_size, n.sizePct, 40..100) { viewModel.editNotif { copy(sizePct = it) } }
-                            PercentSlider(R.string.im_offset_x, n.offsetXPct, -20..20) { viewModel.editNotif { copy(offsetXPct = it) } }
-                            PercentSlider(R.string.im_offset_y, n.offsetYPct, -20..20) { viewModel.editNotif { copy(offsetYPct = it) } }
-                        }
-                    }
-                    EditorTab.Details -> Panel {
-                        OutlinedTextField(
-                            value = state.notif.name,
-                            onValueChange = { v -> viewModel.editNotif { copy(name = v.take(40)) } },
-                            singleLine = true,
-                            label = { Text(stringResource(R.string.im_notif_name)) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            stringResource(R.string.im_notif_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Label(R.string.im_notif_accent)
-                        ColorEditor(state.notif.accent) { c -> viewModel.editNotif { copy(accent = c) } }
-                    }
+                    ActionBar(busy = state.busy, onSave = viewModel::saveZip, onApply = viewModel::requestApply)
                 }
             }
         }
@@ -286,12 +289,70 @@ fun IconMakerScreen(
 }
 
 @Composable
+private fun ActionBar(busy: Boolean, onSave: () -> Unit, onApply: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedButton(onClick = onSave, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
+            Text(stringResource(R.string.im_save_zip), maxLines = 1)
+        }
+        Button(onClick = onApply, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
+            if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text(stringResource(R.string.im_apply), maxLines = 1)
+        }
+    }
+}
+
+/** A rounded segmented control: one pill highlights the current choice. */
+@Composable
+private fun <T> PillTabs(
+    items: List<Pair<T, Int>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = false,
+    compact: Boolean = false,
+) {
+    Row(
+        modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(3.dp)
+            .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        for ((value, label) in items) {
+            val sel = value == selected
+            Box(
+                Modifier
+                    .then(if (scrollable) Modifier else Modifier.weight(1f))
+                    .clip(CircleShape)
+                    .background(if (sel) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = if (compact) 6.dp else 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(label),
+                    style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (sel) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun EditorTabs(tabs: List<EditorTab>, selected: EditorTab, onSelect: (EditorTab) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
         for (t in tabs) {
             val sel = t == selected
             Column(
-                Modifier.clip(RoundedCornerShape(12.dp)).clickable { onSelect(t) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { onSelect(t) }.padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -300,9 +361,9 @@ private fun EditorTabs(tabs: List<EditorTab>, selected: EditorTab, onSelect: (Ed
                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
                     color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
                 Box(
-                    Modifier.height(3.dp).width(26.dp).clip(CircleShape)
+                    Modifier.height(3.dp).width(28.dp).clip(CircleShape)
                         .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent),
                 )
             }
@@ -314,58 +375,57 @@ private fun EditorTabs(tabs: List<EditorTab>, selected: EditorTab, onSelect: (Ed
 @Composable
 private fun Panel(content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) { content() }
 }
 
-private enum class Source { Icons, Brands, Text, Image }
+private enum class Source { Text, Image, Icons }
 
 @Composable
 private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, pickImage: () -> Unit) {
     val spec = state.spec
-    var source by rememberSaveable { mutableStateOf(Source.Icons) }
+    var source by rememberSaveable {
+        mutableStateOf(
+            when (spec.kind) {
+                GlyphKind.Text -> Source.Text
+                GlyphKind.Picture -> Source.Image
+                GlyphKind.Symbol -> Source.Icons
+            },
+        )
+    }
     var query by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val items = listOf(
-                Source.Icons to R.string.im_src_icons,
-                Source.Brands to R.string.im_src_brands,
-                Source.Text to R.string.im_src_text,
-                Source.Image to R.string.im_src_image,
-            )
-            for ((s, label) in items) {
-                FilterChip(
-                    selected = source == s,
-                    onClick = {
-                        source = s
-                        query = ""
-                        when (s) {
-                            Source.Icons, Source.Brands -> vm.edit { copy(kind = GlyphKind.Symbol) }
-                            Source.Text -> vm.edit { copy(kind = GlyphKind.Text) }
-                            Source.Image -> if (state.hasPicture) vm.edit { copy(kind = GlyphKind.Picture) } else pickImage()
-                        }
-                    },
-                    label = { Text(stringResource(label)) },
-                )
-            }
-        }
+        PillTabs(
+            items = listOf(Source.Text to R.string.im_src_text, Source.Image to R.string.im_src_image, Source.Icons to R.string.im_src_icons),
+            selected = source,
+            onSelect = { s ->
+                source = s
+                query = ""
+                when (s) {
+                    Source.Text -> vm.edit { copy(kind = GlyphKind.Text) }
+                    Source.Icons -> vm.edit { copy(kind = GlyphKind.Symbol) }
+                    Source.Image -> if (state.hasPicture) vm.edit { copy(kind = GlyphKind.Picture) } else pickImage()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        )
         when (source) {
-            Source.Icons -> IconGrid(state, vm, query) { query = it }
-            Source.Brands -> BrandGrid(state, vm, query) { query = it }
-            Source.Text -> Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Source.Text -> Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = spec.text,
                     onValueChange = { v -> vm.edit { copy(text = v.take(3), kind = GlyphKind.Text) } },
                     singleLine = true,
-                    placeholder = { Text(stringResource(R.string.im_text_hint)) },
+                    label = { Text(stringResource(R.string.im_text_label)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Text(
+                    stringResource(R.string.im_text_caption),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Source.Image -> Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Source.Image -> Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(onClick = pickImage) {
                     Text(stringResource(if (state.hasPicture) R.string.im_change_image else R.string.im_pick_image))
                 }
@@ -375,19 +435,9 @@ private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, p
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Source.Icons -> IconGrid(state, vm, query) { query = it }
         }
     }
-}
-
-@Composable
-private fun SearchField(query: String, hint: String, onQuery: (String) -> Unit) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQuery,
-        singleLine = true,
-        placeholder = { Text(hint) },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    )
 }
 
 @Composable
@@ -395,7 +445,13 @@ private fun IconGrid(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, 
     val symbols = state.symbols
     val rows = remember(symbols, query) { symbolRows(symbols, query) }
     Column(Modifier.fillMaxSize()) {
-        SearchField(query, stringResource(R.string.im_search_hint, symbols.size), onQuery)
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQuery,
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.im_search_hint, symbols.size)) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
         if (state.symbolsLoading) Hint(R.string.im_loading_icons) else if (rows.isEmpty()) Hint(R.string.im_no_icons)
         LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
             items(rows, key = { it.first().name }) { row ->
@@ -405,7 +461,7 @@ private fun IconGrid(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, 
                         if (s != null) {
                             SymbolCell(
                                 name = s.name,
-                                selected = s.name == state.spec.symbol,
+                                selected = state.spec.kind == GlyphKind.Symbol && s.name == state.spec.symbol,
                                 tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
                             ) { vm.edit { copy(kind = GlyphKind.Symbol, symbol = s.name) } }
@@ -416,69 +472,6 @@ private fun IconGrid(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, 
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun BrandGrid(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, query: String, onQuery: (String) -> Unit) {
-    val brands = state.brands
-    val rows = remember(brands, query) {
-        val q = query.trim().lowercase()
-        (if (q.isEmpty()) brands else brands.filter { it.searchKey.contains(q) }).chunked(BRAND_COLUMNS)
-    }
-    val selectedBrand = state.spec.symbol.startsWith("@") && state.spec.kind == GlyphKind.Symbol
-    Column(Modifier.fillMaxSize()) {
-        SearchField(query, stringResource(R.string.im_search_brands, brands.size), onQuery)
-        if (selectedBrand) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val styles = listOf(
-                    BrandLooks.Style.Original to R.string.im_brand_original,
-                    BrandLooks.Style.Color to R.string.im_brand_color,
-                    BrandLooks.Style.White to R.string.im_brand_white,
-                    BrandLooks.Style.Black to R.string.im_brand_black,
-                )
-                for ((style, label) in styles) {
-                    FilterChip(selected = false, onClick = { vm.brandStyle(style) }, label = { Text(stringResource(label)) })
-                }
-            }
-        }
-        if (rows.isEmpty()) Hint(R.string.im_no_icons)
-        LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-            items(rows, key = { it.first().name }) { row ->
-                Row(Modifier.fillMaxWidth()) {
-                    for (i in 0 until BRAND_COLUMNS) {
-                        val b = row.getOrNull(i)
-                        if (b != null) {
-                            BrandCell(b, selected = b.name == state.spec.symbol && state.spec.kind == GlyphKind.Symbol, modifier = Modifier.weight(1f)) {
-                                vm.useBrand(b)
-                            }
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrandCell(symbol: SymbolLibrary.Symbol, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val look = remember(symbol.name) { BrandLooks.look(symbol, BrandLooks.Style.Original) }
-    Column(
-        modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        BrandTile(symbol, look, IconShape.Rounded, Modifier.size(52.dp))
-        Text(symbol.title, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -496,6 +489,10 @@ private fun symbolRows(all: List<SymbolLibrary.Symbol>, query: String): List<Lis
     }
     return list.chunked(GRID_COLUMNS)
 }
+
+@Composable
+private fun SectionTitle(res: Int) =
+    Text(stringResource(res), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
 
 @Composable
 private fun Label(res: Int) = Text(stringResource(res), style = MaterialTheme.typography.labelLarge)
@@ -516,15 +513,42 @@ private fun SwitchRow(label: Int, checked: Boolean, onChange: (Boolean) -> Unit)
     }
 }
 
+/** Label on the left, current value on the right, slider below. */
 @Composable
-private fun PercentSlider(label: Int, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+private fun ValueSlider(label: String, value: String, position: Float, range: ClosedFloatingPointRange<Float>, steps: Int = 0, onChange: (Float) -> Unit) {
     Column {
-        Text(stringResource(label, value), style = MaterialTheme.typography.labelLarge)
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
-            valueRange = range.first.toFloat()..range.last.toFloat(),
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(value = position, onValueChange = onChange, valueRange = range, steps = steps)
+    }
+}
+
+@Composable
+private fun IntSlider(label: Int, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    ValueSlider(
+        label = stringResource(label),
+        value = "$value%",
+        position = value.toFloat(),
+        range = range.first.toFloat()..range.last.toFloat(),
+    ) { onChange(it.toInt()) }
+}
+
+@Composable
+private fun QuickStyleTile(q: QuickStyle, onClick: () -> Unit) {
+    val brush = if (q.bg2 != null) Brush.linearGradient(listOf(Color(q.bg1), Color(q.bg2)), start = Offset(0f, Float.POSITIVE_INFINITY), end = Offset(Float.POSITIVE_INFINITY, 0f))
+    else Brush.linearGradient(listOf(Color(q.bg1), Color(q.bg1)))
+    Box(
+        Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(brush)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(18.dp).clip(CircleShape).background(Color(q.fg)))
     }
 }
 

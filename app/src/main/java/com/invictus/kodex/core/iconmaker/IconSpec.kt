@@ -11,7 +11,7 @@ enum class IconShape { Circle, Squircle, Rounded, Teardrop, Square }
 
 /** Everything that defines the icon. Sizes are percentages of the 66dp adaptive-icon safe zone. */
 data class IconSpec(
-    val kind: GlyphKind = GlyphKind.Symbol,
+    val kind: GlyphKind = GlyphKind.Text,
     val symbol: String = "bolt",
     val text: String = "K",
     val picture: Bitmap? = null,

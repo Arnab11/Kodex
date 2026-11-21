@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,7 +43,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -54,11 +55,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.invictus.kodex.R
-import com.invictus.kodex.core.iconmaker.BrandLook
-import com.invictus.kodex.core.iconmaker.BrandLooks
 import com.invictus.kodex.core.iconmaker.IconShape
 import com.invictus.kodex.core.iconmaker.IconShapes
-import com.invictus.kodex.core.iconmaker.SymbolLibrary
+import com.invictus.kodex.ui.icons.XIcons
 import kotlin.math.roundToInt
 
 private typealias Layers = IconMakerViewModel.Layers
@@ -108,31 +107,6 @@ fun LayeredIcon(
     }
 }
 
-/** A brand logo dressed like its real launcher icon (solid or gradient tile + glyph). */
-@Composable
-fun BrandTile(symbol: SymbolLibrary.Symbol?, look: BrandLook?, shape: IconShape, modifier: Modifier = Modifier) {
-    val glyph = remember(symbol?.name) { symbol?.let { SymbolLibrary.path(it.name) }?.asComposePath() }
-    Canvas(modifier.clip(MaskShape(shape))) {
-        if (look == null || glyph == null) {
-            drawRect(Color(0x33808080))
-            return@Canvas
-        }
-        if (look.bg2 != null) {
-            drawRect(Brush.linearGradient(listOf(Color(look.bg1), Color(look.bg2)), start = Offset(0f, size.height), end = Offset(size.width, 0f)))
-        } else {
-            drawRect(Color(look.bg1))
-        }
-        val box = size.minDimension * 66f / 72f * look.sizePct / 100f
-        val k = box / 24f
-        val left = (size.width - box) / 2f
-        val top = (size.height - box) / 2f
-        withTransform({
-            translate(left, top)
-            scale(k, k, Offset.Zero)
-        }) { drawPath(glyph, Color(look.fg)) }
-    }
-}
-
 /** Android 13 themed icon: the monochrome layer tinted with [fg] on a flat [bg]. */
 @Composable
 private fun ThemedIcon(layers: Layers?, shape: IconShape, bg: Color, fg: Color, modifier: Modifier = Modifier) {
@@ -165,13 +139,13 @@ enum class PreviewMode(val label: Int) {
 @Composable
 fun previewModeLabel(mode: PreviewMode) = stringResource(mode.label)
 
-val PREVIEW_HEIGHT = 168.dp
+val PREVIEW_HEIGHT = 150.dp
 
 @Composable
-fun IconPreview(mode: PreviewMode, layers: Layers?, shape: IconShape, onShape: (IconShape) -> Unit, brandsReady: Boolean) {
+fun IconPreview(mode: PreviewMode, layers: Layers?, shape: IconShape, onShape: (IconShape) -> Unit) {
     Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT), contentAlignment = Alignment.Center) {
         when (mode) {
-            PreviewMode.Home -> HomePreview(layers, shape, brandsReady)
+            PreviewMode.Home -> HomePreview(layers, shape)
             PreviewMode.Launcher -> LauncherPreview(layers, shape)
             PreviewMode.Shapes -> ShapesPreview(layers, shape, onShape)
             PreviewMode.Themed -> ThemedPreview(layers, shape)
@@ -180,15 +154,22 @@ fun IconPreview(mode: PreviewMode, layers: Layers?, shape: IconShape, onShape: (
     }
 }
 
-private val HOME_BRANDS = listOf("@youtube", "@instagram", "@whatsapp", "@spotify", "@netflix", "@telegram", "@discord")
+private class Dummy(val label: String, val icon: ImageVector, val color: Color)
 
+private val DUMMIES = listOf(
+    Dummy("Files", XIcons.Folder, Color(0xFFF5A524)),
+    Dummy("Search", XIcons.Search, Color(0xFF3B82F6)),
+    Dummy("Paint", XIcons.Palette, Color(0xFFEC4899)),
+    Dummy("Gallery", XIcons.Image, Color(0xFF10B981)),
+    Dummy("Code", XIcons.Code, Color(0xFF6366F1)),
+    Dummy("Shell", XIcons.Terminal, Color(0xFF0EA5E9)),
+    Dummy("Tools", XIcons.Tools, Color(0xFFF97316)),
+)
+
+/** Your icon among other apps on a home screen. */
 @Composable
-private fun HomePreview(layers: Layers?, shape: IconShape, brandsReady: Boolean) {
+private fun HomePreview(layers: Layers?, shape: IconShape) {
     val mask = remember(shape) { MaskShape(shape) }
-    // Your icon sits among real ones, so you judge it against what users actually see.
-    val brands = remember(brandsReady) {
-        HOME_BRANDS.map { n -> SymbolLibrary.get(n)?.let { it to BrandLooks.look(it, BrandLooks.Style.Original) } }
-    }
     @Composable
     fun slot(label: String, content: @Composable () -> Unit) {
         Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -197,11 +178,13 @@ private fun HomePreview(layers: Layers?, shape: IconShape, brandsReady: Boolean)
         }
     }
     val items: List<@Composable () -> Unit> = buildList {
-        brands.forEachIndexed { i, b ->
+        DUMMIES.forEachIndexed { i, d ->
             if (i == 1) add { slot(stringResource(R.string.im_app_label)) { LayeredIcon(layers, IconShape.Square, Modifier.fillMaxSize()) } }
             add {
-                slot(b?.first?.title ?: "") {
-                    BrandTile(b?.first, b?.second, IconShape.Square, Modifier.fillMaxSize())
+                slot(d.label) {
+                    Box(Modifier.fillMaxSize().background(d.color), contentAlignment = Alignment.Center) {
+                        Icon(d.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
                 }
             }
         }
@@ -209,8 +192,8 @@ private fun HomePreview(layers: Layers?, shape: IconShape, brandsReady: Boolean)
     Box(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF1B2A49), Color(0xFF4B2E83), Color(0xFF0F766E)))),
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalArrangement = Arrangement.SpaceEvenly) {

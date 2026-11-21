@@ -15,7 +15,6 @@ import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
 import com.invictus.kodex.ai.agent.AppIconApplier
 import com.invictus.kodex.core.iconmaker.BgKind
-import com.invictus.kodex.core.iconmaker.BrandLooks
 import com.invictus.kodex.core.iconmaker.GlyphKind
 import com.invictus.kodex.core.iconmaker.IconExporter
 import com.invictus.kodex.core.iconmaker.IconRenderer
@@ -60,7 +59,6 @@ class IconMakerViewModel(
         /** White-on-transparent notification glyph (96px). */
         val notifGlyph: ImageBitmap? = null,
         val symbols: List<SymbolLibrary.Symbol> = emptyList(),
-        val brands: List<SymbolLibrary.Symbol> = emptyList(),
         val symbolsLoading: Boolean = true,
         val hasPicture: Boolean = false,
         val busy: Boolean = false,
@@ -83,11 +81,6 @@ class IconMakerViewModel(
         viewModelScope.launch {
             val symbols = SymbolLibrary.load(app)
             _ui.update { it.copy(symbols = symbols, symbolsLoading = false) }
-            redraw()
-        }
-        viewModelScope.launch {
-            val brands = SymbolLibrary.loadBrands(app)
-            _ui.update { it.copy(brands = brands) }
             redraw()
         }
         viewModelScope.launch {
@@ -114,28 +107,17 @@ class IconMakerViewModel(
         inputs.update { it.copy(notif = next) }
     }
 
-    /** Picks a brand logo and dresses it like the real app icon (or in another [style]). */
-    fun useBrand(symbol: SymbolLibrary.Symbol, style: BrandLooks.Style = BrandLooks.Style.Original) {
-        val look = BrandLooks.look(symbol, style)
+    /** One-tap look: icon color plus a solid or gradient background. */
+    fun applyStyle(fg: Int, bg1: Int, bg2: Int?) {
         edit {
             copy(
-                kind = GlyphKind.Symbol,
-                symbol = symbol.name,
-                fgColor = look.fg,
-                bgKind = if (look.bg2 != null) BgKind.Gradient else BgKind.Solid,
-                bg1 = look.bg1,
-                bg2 = look.bg2 ?: bg2,
-                bgAngle = look.angle,
-                sizePct = look.sizePct,
-                offsetXPct = 0,
-                offsetYPct = 0,
+                fgColor = fg,
+                bgKind = if (bg2 != null) BgKind.Gradient else BgKind.Solid,
+                bg1 = bg1,
+                bg2 = bg2 ?: this.bg2,
+                bgAngle = 45,
             )
         }
-    }
-
-    /** Re-dresses the currently selected brand logo. */
-    fun brandStyle(style: BrandLooks.Style) {
-        SymbolLibrary.get(_ui.value.spec.symbol)?.takeIf { it.isBrand }?.let { useBrand(it, style) }
     }
 
     fun setPicture(uri: Uri) {

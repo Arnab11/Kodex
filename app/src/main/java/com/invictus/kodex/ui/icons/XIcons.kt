@@ -334,6 +334,21 @@ object XIcons {
         icon("HorizontalSplit", "M3,19h18v-6H3v6z M3,11h18V9H3v2z M3,5v2h18V5H3z")
     }
 
+    /** Vertical split (editor left, terminal right). */
+    val VerticalSplit: ImageVector by lazy {
+        icon("VerticalSplit", "M3,15h8v-2H3v2zm0,4h8v-2H3v2zm0-8h8V9H3v2zm0-6v2h8V5H3zm10,0h8v14h-8V5z")
+    }
+
+    /** Dock panel / sidebar to right. */
+    val DockRight: ImageVector by lazy {
+        icon("DockRight", "M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M19,19h-4V5h4V19z")
+    }
+
+    /** Dock panel / sidebar to left. */
+    val DockLeft: ImageVector by lazy {
+        icon("DockLeft", "M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,19H5V5h4V19z")
+    }
+
     // M6 git feature: these glyphs aren't in the cmp artifact's current release, so
     // they use the same hand-drawn path pattern as the icons above.
     /** Source control entry point (Material Symbols "commit"). */

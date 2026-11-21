@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -105,10 +109,51 @@ fun TermuxSetupScreen(
 
             // ---- 1 · Connection ----
             SettingsSectionHeader(stringResource(R.string.termux_sec_connection))
+            if (viewModel.isPlayStoreBuild) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(R.string.termux_playstore_warning_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = stringResource(R.string.termux_playstore_warning_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { TermuxLauncher.openReleasesPage(context) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black,
+                                ),
+                            ) {
+                                Text(stringResource(R.string.termux_get_github))
+                            }
+                            OutlinedButton(
+                                onClick = { TermuxLauncher.openFdroidPage(context) },
+                                border = BorderStroke(1.dp, Color.White),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White,
+                                ),
+                            ) {
+                                Text(stringResource(R.string.termux_get_fdroid))
+                            }
+                        }
+                    }
+                }
+            }
             SettingsSectionCard {
                 StatusRow(
                     label = stringResource(R.string.termux_chk_installed),
-                    ok = viewModel.termuxInstalled,
+                    ok = viewModel.termuxInstalled && !viewModel.isPlayStoreBuild,
+                    hint = if (viewModel.isPlayStoreBuild) stringResource(R.string.termux_playstore_warning_title) else null,
                     actionLabel = stringResource(R.string.termux_get),
                     onAction = { TermuxLauncher.openReleasesPage(context) },
                 )

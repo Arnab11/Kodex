@@ -47,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -142,6 +143,10 @@ fun TerminalScreen(
     onBack: () -> Unit,
     onOpenSetup: () -> Unit,
     modifier: Modifier = Modifier,
+    isSplit: Boolean = false,
+    isVerticalSplit: Boolean = false,
+    onToggleSplitOrientation: (() -> Unit)? = null,
+    onCloseSplit: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext
@@ -198,13 +203,33 @@ fun TerminalScreen(
 
     Scaffold(
         modifier = modifier,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = if (isSplit) WindowInsets(0, 0, 0, 0) else WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbar) { Snackbar(it) } },
         topBar = {
             TopAppBar(
+                windowInsets = if (isSplit) WindowInsets(0, 0, 0, 0) else TopAppBarDefaults.windowInsets,
                 title = { Text(stringResource(R.string.terminal_title)) },
-                navigationIcon = { IconButton(onClick = ::leave) { Icon(XIcons.ArrowBack, null) } },
+                navigationIcon = {
+                    if (isSplit) {
+                        IconButton(onClick = { onCloseSplit?.invoke() ?: leave() }) {
+                            Icon(XIcons.Close, contentDescription = stringResource(R.string.action_close_dialog))
+                        }
+                    } else {
+                        IconButton(onClick = ::leave) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back)) }
+                    }
+                },
                 actions = {
+                    if (isSplit && onToggleSplitOrientation != null) {
+                        IconButton(onClick = onToggleSplitOrientation) {
+                            Icon(
+                                if (isVerticalSplit) XIcons.HorizontalSplit else XIcons.VerticalSplit,
+                                contentDescription = stringResource(
+                                    if (isVerticalSplit) R.string.terminal_split_horizontal
+                                    else R.string.terminal_split_vertical
+                                ),
+                            )
+                        }
+                    }
                     IconButton(onClick = { runOpen = true }, enabled = selected != null) {
                         Icon(XIcons.PlayArrow, stringResource(R.string.terminal_set_run_group))
                     }
@@ -423,11 +448,27 @@ private fun StatusOverlay(
             }
         }
         RemoteSession.State.FAILED -> Box(Modifier.fillMaxSize().background(bg).padding(24.dp), contentAlignment = Alignment.Center) {
+            val context = LocalContext.current
+            val isPlayStore = TermuxLauncher.isPlayStoreBuild(context)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(session.message.orEmpty(), color = fg, style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onRetry) { Text(stringResource(R.string.terminal_retry)) }
-                OutlinedButton(onClick = onSetup) { Text(stringResource(R.string.termux_setup_action)) }
-                TextButton(onClick = onOpenTermux) { Text(stringResource(R.string.terminal_open_termux)) }
+                Text(
+                    session.message.orEmpty(),
+                    color = fg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                if (isPlayStore) {
+                    Button(onClick = { TermuxLauncher.openReleasesPage(context) }) {
+                        Text(stringResource(R.string.termux_get_github))
+                    }
+                    OutlinedButton(onClick = { TermuxLauncher.openFdroidPage(context) }) {
+                        Text(stringResource(R.string.termux_get_fdroid))
+                    }
+                } else {
+                    Button(onClick = onRetry) { Text(stringResource(R.string.terminal_retry)) }
+                    OutlinedButton(onClick = onSetup) { Text(stringResource(R.string.termux_setup_action)) }
+                    TextButton(onClick = onOpenTermux) { Text(stringResource(R.string.terminal_open_termux)) }
+                }
             }
         }
         RemoteSession.State.EXITED -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {

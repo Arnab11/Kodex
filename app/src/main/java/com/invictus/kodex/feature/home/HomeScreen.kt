@@ -151,6 +151,8 @@ fun HomeScreen(
     var searchRequested by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
+    // The terminal button only exists while the terminal feature is switched on in Settings.
+    val terminalEnabled = com.invictus.kodex.core.external.TermuxSetupPrefs.enabled(context).value
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -250,10 +252,12 @@ fun HomeScreen(
                             Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
                         }
                         Spacer(Modifier.width(10.dp))
-                        HeaderIconButton(onClick = onOpenTerminal) {
-                            Icon(XIcons.Terminal, contentDescription = stringResource(R.string.menu_terminal))
+                        if (terminalEnabled) {
+                            HeaderIconButton(onClick = onOpenTerminal) {
+                                Icon(XIcons.Terminal, contentDescription = stringResource(R.string.menu_terminal))
+                            }
+                            Spacer(Modifier.width(10.dp))
                         }
-                        Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {
                             Icon(XIcons.Settings, contentDescription = stringResource(R.string.action_settings))
                         }

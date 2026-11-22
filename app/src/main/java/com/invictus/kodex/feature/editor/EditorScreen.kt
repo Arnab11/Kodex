@@ -147,6 +147,8 @@ fun EditorScreen(
     }
     val termuxGate = com.invictus.kodex.feature.termux.rememberTermuxGate(termuxProblem)
     val terminalEnabled = com.invictus.kodex.core.external.TermuxSetupPrefs.enabled(context).value
+    // Switching the terminal off in Settings also closes an open split.
+    androidx.compose.runtime.LaunchedEffect(terminalEnabled) { if (!terminalEnabled) showTerminalSplit = false }
     var showFind by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
     // M17: AI panel in a bottom split; gate is null in the normal flavor.
@@ -314,29 +316,31 @@ fun EditorScreen(
                     ) {
                         Icon(XIcons.Save, contentDescription = stringResource(R.string.action_save))
                     }
-                    IconButton(
-                        onClick = {
-                            if (!showTerminalSplit) {
-                                val dir = activePath?.let { File(it).parentFile } ?: viewModel.projectRoot ?: context.filesDir
-                                com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
-                                com.invictus.kodex.terminal.TerminalHub.lastDir = dir
-                                if (com.invictus.kodex.terminal.TerminalHub.tabs.isEmpty()) {
-                                    com.invictus.kodex.terminal.TerminalHub.newTab(context.applicationContext, dir)
+                    if (terminalEnabled) {
+                        IconButton(
+                            onClick = {
+                                if (!showTerminalSplit) {
+                                    val dir = activePath?.let { File(it).parentFile } ?: viewModel.projectRoot ?: context.filesDir
+                                    com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
+                                    com.invictus.kodex.terminal.TerminalHub.lastDir = dir
+                                    if (com.invictus.kodex.terminal.TerminalHub.tabs.isEmpty()) {
+                                        com.invictus.kodex.terminal.TerminalHub.newTab(context.applicationContext, dir)
+                                    }
+                                    if (!isTablet) {
+                                        isVerticalSplit = isLandscape
+                                    }
+                                    showTerminalSplit = true
+                                } else {
+                                    showTerminalSplit = false
                                 }
-                                if (!isTablet) {
-                                    isVerticalSplit = isLandscape
-                                }
-                                showTerminalSplit = true
-                            } else {
-                                showTerminalSplit = false
-                            }
-                        },
-                    ) {
-                        Icon(
-                            XIcons.Terminal,
-                            contentDescription = stringResource(R.string.terminal_title),
-                            tint = if (showTerminalSplit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        )
+                            },
+                        ) {
+                            Icon(
+                                XIcons.Terminal,
+                                contentDescription = stringResource(R.string.terminal_title),
+                                tint = if (showTerminalSplit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 },
                 overflow = {

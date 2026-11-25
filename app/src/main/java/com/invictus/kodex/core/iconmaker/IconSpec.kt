@@ -6,6 +6,9 @@ enum class GlyphKind { Symbol, Text, Picture }
 
 enum class BgKind { Solid, Gradient }
 
+/** Letter styles for the Text glyph. */
+enum class TextFont { Bold, Light, Serif, Mono, Script }
+
 /** Launcher masks used by the previews and by the legacy (pre-Android 8) PNGs. */
 enum class IconShape { Circle, Squircle, Rounded, Teardrop, Square }
 
@@ -14,6 +17,7 @@ data class IconSpec(
     val kind: GlyphKind = GlyphKind.Text,
     val symbol: String = "bolt",
     val text: String = "K",
+    val font: TextFont = TextFont.Bold,
     val picture: Bitmap? = null,
     val tintPicture: Boolean = false,
     val fgColor: Int = 0xFFFFFFFF.toInt(),

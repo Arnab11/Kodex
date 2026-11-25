@@ -102,7 +102,7 @@ object IconRenderer {
         }
         when (spec.kind) {
             GlyphKind.Symbol -> SymbolLibrary.path(spec.symbol)?.let { drawSymbol(c, it, rect, paint) }
-            GlyphKind.Text -> drawText(c, spec.text, rect, paint)
+            GlyphKind.Text -> drawText(c, spec.text, spec.font, rect, paint)
             GlyphKind.Picture -> spec.picture?.let { drawPicture(c, it, rect, spec, mono) }
         }
         return bmp
@@ -122,7 +122,7 @@ object IconRenderer {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = Color.WHITE }
         when (spec.kind) {
             GlyphKind.Symbol -> SymbolLibrary.path(spec.symbol)?.let { drawSymbol(c, it, rect, paint) }
-            GlyphKind.Text -> drawText(c, spec.text, rect, paint)
+            GlyphKind.Text -> drawText(c, spec.text, spec.font, rect, paint)
             GlyphKind.Picture -> spec.picture?.let { drawPicture(c, it, rect, spec, mono = true) }
         }
         return bmp
@@ -151,10 +151,18 @@ object IconRenderer {
         c.drawPath(out, paint)
     }
 
-    private fun drawText(c: Canvas, text: String, rect: RectF, paint: Paint) {
+    private fun typefaceFor(font: TextFont): Typeface = when (font) {
+        TextFont.Bold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        TextFont.Light -> Typeface.create("sans-serif-light", Typeface.NORMAL)
+        TextFont.Serif -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        TextFont.Mono -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        TextFont.Script -> Typeface.create("cursive", Typeface.NORMAL)
+    }
+
+    private fun drawText(c: Canvas, text: String, font: TextFont, rect: RectF, paint: Paint) {
         val t = text.trim().take(3)
         if (t.isEmpty()) return
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.typeface = typefaceFor(font)
         paint.textAlign = Paint.Align.CENTER
         paint.textSize = rect.height()
         val b = Rect()

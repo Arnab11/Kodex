@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,11 +39,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -54,6 +57,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.PathParser
 import com.invictus.kodex.R
 import com.invictus.kodex.core.iconmaker.IconShape
 import com.invictus.kodex.core.iconmaker.IconShapes
@@ -127,77 +131,155 @@ private fun ThemedIcon(layers: Layers?, shape: IconShape, bg: Color, fg: Color, 
     }
 }
 
-/** Home screen first: that is where an icon is judged next to real apps. */
+/** Three previews: a real-feeling home screen, the icon itself (touch + masks), and the Android 13 themed icon. */
 enum class PreviewMode(val label: Int) {
     Home(R.string.im_preview_home),
-    Launcher(R.string.im_preview_launcher),
-    Shapes(R.string.im_preview_shapes),
+    Icon(R.string.im_preview_icon),
     Themed(R.string.im_preview_themed),
-    LayerStack(R.string.im_preview_layers),
 }
 
 @Composable
 fun previewModeLabel(mode: PreviewMode) = stringResource(mode.label)
 
-val PREVIEW_HEIGHT = 150.dp
+/** Height of the preview card's picture; the mode pills float over its bottom 46dp. */
+val PREVIEW_HEIGHT = 196.dp
+private val PILL_SPACE = 46.dp
 
 @Composable
 fun IconPreview(mode: PreviewMode, layers: Layers?, shape: IconShape, onShape: (IconShape) -> Unit) {
     Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT), contentAlignment = Alignment.Center) {
         when (mode) {
             PreviewMode.Home -> HomePreview(layers, shape)
-            PreviewMode.Launcher -> LauncherPreview(layers, shape)
-            PreviewMode.Shapes -> ShapesPreview(layers, shape, onShape)
+            PreviewMode.Icon -> IconModePreview(layers, shape, onShape)
             PreviewMode.Themed -> ThemedPreview(layers, shape)
-            PreviewMode.LayerStack -> LayersPreview(layers)
         }
     }
 }
 
-private class Dummy(val label: String, val icon: ImageVector, val color: Color)
+// ---- Home screen -------------------------------------------------------------------------------------------
 
-private val DUMMIES = listOf(
-    Dummy("Files", XIcons.Folder, Color(0xFFF5A524)),
-    Dummy("Search", XIcons.Search, Color(0xFF3B82F6)),
-    Dummy("Paint", XIcons.Palette, Color(0xFFEC4899)),
-    Dummy("Gallery", XIcons.Image, Color(0xFF10B981)),
-    Dummy("Code", XIcons.Code, Color(0xFF6366F1)),
-    Dummy("Shell", XIcons.Terminal, Color(0xFF0EA5E9)),
-    Dummy("Tools", XIcons.Tools, Color(0xFFF97316)),
+private sealed interface PreviewApp {
+    val label: String
+}
+
+/** A one-colour logo on a tile (solid or gradient). [size] is the logo's share of the tile. */
+private class GlyphApp(
+    override val label: String,
+    val glyph: String,
+    val bg1: Color,
+    val bg2: Color?,
+    val fg: Color,
+    val size: Float,
+) : PreviewApp
+
+/** Play Store: the four-colour triangle on white, drawn directly. */
+private class PlayApp(override val label: String) : PreviewApp
+
+private val NEIGHBOURS: List<PreviewApp> = listOf(
+    GlyphApp("YouTube", PreviewGlyphs.YOUTUBE, Color.White, null, Color(0xFFFF0000), 0.64f),
+    PlayApp("Play Store"),
+    GlyphApp("Gmail", PreviewGlyphs.GMAIL, Color.White, null, Color(0xFFEA4335), 0.58f),
+    GlyphApp("WhatsApp", PreviewGlyphs.WHATSAPP, Color(0xFF25D366), null, Color.White, 0.58f),
+    GlyphApp("Instagram", PreviewGlyphs.INSTAGRAM, Color(0xFFFCAF45), Color(0xFF833AB4), Color.White, 0.54f),
+    GlyphApp("Spotify", PreviewGlyphs.SPOTIFY, Color(0xFF0B0B0F), null, Color(0xFF1ED760), 0.64f),
+    GlyphApp("Telegram", PreviewGlyphs.TELEGRAM, Color(0xFF26A5E4), null, Color.White, 0.58f),
 )
 
-/** Your icon among other apps on a home screen. */
+@Composable
+private fun GlyphTile(app: GlyphApp, modifier: Modifier = Modifier) {
+    val path = remember(app.glyph) { runCatching { PathParser.createPathFromPathData(app.glyph)?.asComposePath() }.getOrNull() }
+    Canvas(modifier) {
+        if (app.bg2 != null) {
+            drawRect(Brush.linearGradient(listOf(app.bg1, app.bg2), start = Offset(0f, size.height), end = Offset(size.width, 0f)))
+        } else {
+            drawRect(app.bg1)
+        }
+        if (path != null) {
+            val box = size.minDimension * app.size
+            withTransform({
+                translate((size.width - box) / 2f, (size.height - box) / 2f)
+                scale(box / 24f, box / 24f, Offset.Zero)
+            }) { drawPath(path, app.fg) }
+        }
+    }
+}
+
+@Composable
+private fun PlayTile(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        drawRect(Color.White)
+        val w = size.width
+        val h = size.height
+        fun tri(a: Offset, b: Offset, c: Offset, color: Color) {
+            val p = Path().apply {
+                moveTo(a.x * w, a.y * h)
+                lineTo(b.x * w, b.y * h)
+                lineTo(c.x * w, c.y * h)
+                close()
+            }
+            drawPath(p, color)
+        }
+        val a = Offset(0.28f, 0.17f)
+        val b = Offset(0.28f, 0.83f)
+        val c = Offset(0.80f, 0.50f)
+        val p = Offset(0.50f, 0.50f)
+        val e = Offset(0.52f, 0.68f)
+        tri(a, b, p, Color(0xFF00A0FF))
+        tri(a, p, c, Color(0xFF00D26A))
+        tri(p, e, c, Color(0xFFFFD500))
+        tri(b, p, e, Color(0xFFFF3A44))
+    }
+}
+
+@Composable
+private fun AppTile(app: PreviewApp, modifier: Modifier = Modifier) {
+    when (app) {
+        is GlyphApp -> GlyphTile(app, modifier)
+        is PlayApp -> PlayTile(modifier)
+    }
+}
+
+/** Your icon among real-looking apps on a wallpaper, with a status bar: the way it will actually be judged. */
 @Composable
 private fun HomePreview(layers: Layers?, shape: IconShape) {
     val mask = remember(shape) { MaskShape(shape) }
     @Composable
     fun slot(label: String, content: @Composable () -> Unit) {
-        Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Box(Modifier.size(44.dp).clip(mask)) { content() }
             Text(label, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }
-    val items: List<@Composable () -> Unit> = buildList {
-        DUMMIES.forEachIndexed { i, d ->
-            if (i == 1) add { slot(stringResource(R.string.im_app_label)) { LayeredIcon(layers, IconShape.Square, Modifier.fillMaxSize()) } }
-            add {
-                slot(d.label) {
-                    Box(Modifier.fillMaxSize().background(d.color), contentAlignment = Alignment.Center) {
-                        Icon(d.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
+    val cells: List<@Composable () -> Unit> = buildList {
+        NEIGHBOURS.forEachIndexed { i, app ->
+            if (i == 1) add { slot(stringResource(R.string.im_app_label)) { LayeredIcon(layers, shape, Modifier.fillMaxSize()) } }
+            add { slot(app.label) { AppTile(app, Modifier.fillMaxSize()) } }
         }
     }
     Box(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF1B2A49), Color(0xFF4B2E83), Color(0xFF0F766E)))),
+            .background(Brush.linearGradient(listOf(Color(0xFF0F2A4A), Color(0xFF3B2A78), Color(0xFF0E6F6B)))),
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalArrangement = Arrangement.SpaceEvenly) {
-            for (row in items.chunked(4)) {
+        // a soft vignette so the floating pills read well over the wallpaper
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Color.Transparent, Color(0x66000000))),
+            ),
+        )
+        Column(
+            Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = PILL_SPACE),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("9:41", color = Color.White, fontSize = 10.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
+                    Box(Modifier.width(16.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.9f)))
+                }
+            }
+            for (row in cells.chunked(4)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     for (cell in row) cell()
                 }
@@ -206,47 +288,50 @@ private fun HomePreview(layers: Layers?, shape: IconShape) {
     }
 }
 
+// ---- Icon ----------------------------------------------------------------------------------------------------
+
 @Composable
-private fun LauncherPreview(layers: Layers?, shape: IconShape) {
+private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (IconShape) -> Unit) {
     var drag by remember { mutableStateOf(Offset.Zero) }
     var safe by remember { mutableStateOf(false) }
     val parallax by animateOffsetAsState(drag, label = "parallax")
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        LayeredIcon(
-            layers = layers,
-            shape = shape,
-            parallax = parallax,
-            safeZone = safe,
-            modifier = Modifier
-                .size(116.dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = { drag = Offset.Zero },
-                        onDragCancel = { drag = Offset.Zero },
-                    ) { change, amount ->
-                        change.consume()
-                        drag = Offset((drag.x + amount.x / 40f).coerceIn(-1f, 1f), (drag.y + amount.y / 40f).coerceIn(-1f, 1f))
-                    }
-                },
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = safe, onClick = { safe = !safe }, label = { Text(stringResource(R.string.im_safe_zone)) })
-            Text(
-                stringResource(R.string.im_drag_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(130.dp),
+    Column(
+        Modifier.fillMaxSize().padding(bottom = PILL_SPACE),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            LayeredIcon(
+                layers = layers,
+                shape = selected,
+                parallax = parallax,
+                safeZone = safe,
+                modifier = Modifier
+                    .size(88.dp)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragEnd = { drag = Offset.Zero },
+                            onDragCancel = { drag = Offset.Zero },
+                        ) { change, amount ->
+                            change.consume()
+                            drag = Offset((drag.x + amount.x / 40f).coerceIn(-1f, 1f), (drag.y + amount.y / 40f).coerceIn(-1f, 1f))
+                        }
+                    },
             )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(selected = safe, onClick = { safe = !safe }, label = { Text(stringResource(R.string.im_safe_zone)) })
+                Text(
+                    stringResource(R.string.im_drag_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(120.dp),
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun ShapesPreview(layers: Layers?, selected: IconShape, onShape: (IconShape) -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (shape in IconShape.entries) {
-                Column(
+                Box(
                     Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .then(
@@ -254,20 +339,9 @@ private fun ShapesPreview(layers: Layers?, selected: IconShape, onShape: (IconSh
                             else Modifier,
                         )
                         .clickable { onShape(shape) }
-                        .padding(5.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                        .padding(4.dp),
                 ) {
-                    LayeredIcon(layers, shape, Modifier.size(46.dp))
-                    Text(stringResource(shapeLabel(shape)), fontSize = 10.sp, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            for (d in listOf(24, 32, 40, 56)) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    LayeredIcon(layers, selected, Modifier.size(d.dp))
-                    Text("${d}dp", fontSize = 10.sp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LayeredIcon(layers, shape, Modifier.size(34.dp))
                 }
             }
         }
@@ -282,6 +356,8 @@ fun shapeLabel(shape: IconShape): Int = when (shape) {
     IconShape.Square -> R.string.im_shape_square
 }
 
+// ---- Themed --------------------------------------------------------------------------------------------------
+
 @Composable
 private fun ThemedPreview(layers: Layers?, shape: IconShape) {
     val cs = MaterialTheme.colorScheme
@@ -290,50 +366,16 @@ private fun ThemedPreview(layers: Layers?, shape: IconShape) {
         Triple(R.string.im_dark, Color(0xFF284777), Color(0xFFD6E3FF)),
         Triple(R.string.im_your_theme, cs.primaryContainer, cs.onPrimaryContainer),
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxSize().padding(bottom = PILL_SPACE),
+        horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         for ((label, bg, fg) in tiles) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ThemedIcon(layers, shape, bg, fg, Modifier.size(72.dp))
+                ThemedIcon(layers, shape, bg, fg, Modifier.size(68.dp))
                 Text(stringResource(label), style = MaterialTheme.typography.labelMedium)
             }
-        }
-    }
-}
-
-@Composable
-private fun LayersPreview(layers: Layers?) {
-    val checker = MaterialTheme.colorScheme.surfaceContainerHighest
-    val safeLine = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-    @Composable
-    fun tile(label: Int, content: @Composable () -> Unit) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(78.dp).clip(RoundedCornerShape(12.dp)).background(checker)) { content() }
-            Text(stringResource(label), style = MaterialTheme.typography.labelMedium)
-        }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        tile(R.string.im_layer_bg) { LayerImage(layers?.bg, safeLine, showSafe = false) }
-        tile(R.string.im_layer_fg) { LayerImage(layers?.fg, safeLine, showSafe = true) }
-        tile(R.string.im_layer_mono) { LayerImage(layers?.mono, safeLine, showSafe = true, tint = MaterialTheme.colorScheme.onSurface) }
-    }
-}
-
-@Composable
-private fun LayerImage(image: ImageBitmap?, safeLine: Color, showSafe: Boolean, tint: Color? = null) {
-    Canvas(Modifier.fillMaxSize()) {
-        if (image != null) {
-            drawImage(
-                image,
-                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                colorFilter = tint?.let { ColorFilter.tint(it, BlendMode.SrcIn) },
-            )
-        }
-        if (showSafe) {
-            drawCircle(
-                color = safeLine,
-                radius = size.minDimension * 33f / 108f,
-                style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))),
-            )
         }
     }
 }

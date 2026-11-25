@@ -206,20 +206,14 @@
     <string name="archive_preview_unsupported">No preview for this file type. Extract it to open it.</string>
     <string name="tools_iconmaker_title">Icon maker</string>
     <string name="tools_iconmaker_desc">Design adaptive launcher icons with live previews and apply them to a project</string>
-    <string name="im_preview_launcher">Launcher</string>
-    <string name="im_preview_shapes">Shapes</string>
     <string name="im_preview_home">Home screen</string>
     <string name="im_preview_themed">Themed</string>
-    <string name="im_preview_layers">Layers</string>
     <string name="im_safe_zone">Safe zone</string>
     <string name="im_drag_hint">Drag the icon to see the layers move</string>
     <string name="im_light">Light</string>
     <string name="im_dark">Dark</string>
     <string name="im_your_theme">Your theme</string>
     <string name="im_app_label">My app</string>
-    <string name="im_layer_bg">Background</string>
-    <string name="im_layer_fg">Foreground</string>
-    <string name="im_layer_mono">Monochrome</string>
     <string name="im_src_text">Text</string>
     <string name="im_src_image">Image</string>
     <string name="im_search_hint">Search %1$d icons</string>
@@ -272,4 +266,11 @@
     <string name="im_text_label">Letters (1–3)</string>
     <string name="im_text_caption">Shown in bold and sized to fit. Pick Icons or Image for artwork.</string>
     <string name="im_reset">Reset size and position</string>
+    <string name="im_preview_icon">Icon</string>
+    <string name="im_text_style">Letter style</string>
+    <string name="im_font_bold">Bold</string>
+    <string name="im_font_light">Light</string>
+    <string name="im_font_serif">Serif</string>
+    <string name="im_font_mono">Mono</string>
+    <string name="im_font_script">Script</string>
 </resources>

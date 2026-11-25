@@ -63,14 +63,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.core.iconmaker.BgKind
 import com.invictus.kodex.core.iconmaker.GlyphKind
-import com.invictus.kodex.core.iconmaker.IconSpec
+import com.invictus.kodex.core.iconmaker.TextFont
 import com.invictus.kodex.core.iconmaker.SymbolLibrary
 import com.invictus.kodex.ui.icons.XIcons
 
@@ -152,14 +154,14 @@ fun IconMakerScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             )
 
-            // The preview never scrolls away while you edit.
+            // The preview never scrolls away while you edit. Mode pills float over its bottom edge.
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 8.dp)) {
-                    if (isApp) {
+                if (isApp) {
+                    Box {
                         IconPreview(
                             mode = preview,
                             layers = state.layers,
@@ -170,14 +172,13 @@ fun IconMakerScreen(
                             items = PreviewMode.entries.map { it to it.label },
                             selected = preview,
                             onSelect = { preview = it },
-                            scrollable = true,
                             compact = true,
-                            modifier = Modifier.padding(horizontal = 8.dp),
+                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
                         )
-                    } else {
-                        Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT + 24.dp)) {
-                            NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
-                        }
+                    }
+                } else {
+                    Box(Modifier.fillMaxWidth().height(172.dp)) {
+                        NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
                     }
                 }
             }
@@ -419,6 +420,12 @@ private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, p
                     label = { Text(stringResource(R.string.im_text_label)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                SectionTitle(R.string.im_text_style)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for (f in TextFont.entries) {
+                        FontTile(f, selected = spec.font == f) { vm.edit { copy(font = f, kind = GlyphKind.Text) } }
+                    }
+                }
                 Text(
                     stringResource(R.string.im_text_caption),
                     style = MaterialTheme.typography.bodySmall,
@@ -488,6 +495,33 @@ private fun symbolRows(all: List<SymbolLibrary.Symbol>, query: String): List<Lis
         hits.filter { it.name.startsWith(q) } + hits.filterNot { it.name.startsWith(q) }
     }
     return list.chunked(GRID_COLUMNS)
+}
+
+/** A letter style, shown as "Aa" in that style. */
+@Composable
+private fun FontTile(font: TextFont, selected: Boolean, onClick: () -> Unit) {
+    val (family, weight, label) = when (font) {
+        TextFont.Bold -> Triple(FontFamily.SansSerif, FontWeight.Bold, R.string.im_font_bold)
+        TextFont.Light -> Triple(FontFamily.SansSerif, FontWeight.Light, R.string.im_font_light)
+        TextFont.Serif -> Triple(FontFamily.Serif, FontWeight.Bold, R.string.im_font_serif)
+        TextFont.Mono -> Triple(FontFamily.Monospace, FontWeight.Bold, R.string.im_font_mono)
+        TextFont.Script -> Triple(FontFamily.Cursive, FontWeight.Normal, R.string.im_font_script)
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier
+            .width(72.dp)
+            .clip(shape)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text("Aa", fontFamily = family, fontWeight = weight, fontSize = 24.sp)
+        Text(stringResource(label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable

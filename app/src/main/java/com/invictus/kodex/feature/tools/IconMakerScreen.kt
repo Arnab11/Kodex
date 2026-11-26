@@ -41,6 +41,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -613,14 +617,57 @@ private fun symbolRows(all: List<SymbolLibrary.Symbol>, query: String): List<Lis
 
 // ---- Export dialog ------------------------------------------------------------------------------------------
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExportDialog(state: IconMakerViewModel.UiState, vm: IconMakerViewModel) {
     val e = state.export ?: return
+    val o = state.options
+    val isApp = state.mode == MakerMode.App
     AlertDialog(
         onDismissRequest = vm::dismissExport,
         title = { Text(stringResource(if (e.kind == ExportKind.Zip) R.string.im_save_zip else R.string.im_pick_project)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (e.kind == ExportKind.Apply) {
+                    Column(Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) {
+                        for (t in e.targets) {
+                            val sel = t === e.selected
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (sel) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable { vm.selectTarget(t) }
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = sel, onClick = { vm.selectTarget(t) })
+                                Column(Modifier.weight(1f)) {
+                                    Text(t.name, style = MaterialTheme.typography.bodyLarge)
+                                    Text(t.root.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                }
+                if (isApp) {
+                    Text(stringResource(R.string.im_opt_title), style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(o.adaptive, { vm.setOptions(o.copy(adaptive = !o.adaptive)) }, { Text(stringResource(R.string.im_opt_adaptive)) })
+                        FilterChip(o.themed, { vm.setOptions(o.copy(themed = !o.themed)) }, { Text(stringResource(R.string.im_opt_themed)) }, enabled = o.adaptive)
+                        FilterChip(o.legacy, { vm.setOptions(o.copy(legacy = !o.legacy)) }, { Text(stringResource(R.string.im_opt_legacy)) })
+                        FilterChip(o.round, { vm.setOptions(o.copy(round = !o.round)) }, { Text(stringResource(R.string.im_opt_round)) })
+                        FilterChip(o.playStore, { vm.setOptions(o.copy(playStore = !o.playStore)) }, { Text(stringResource(R.string.im_opt_playstore)) })
+                    }
+                    if (e.kind == ExportKind.Apply) {
+                        Text(
+                            stringResource(R.string.im_opt_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 Text(stringResource(R.string.im_export_format), style = MaterialTheme.typography.labelLarge)
                 PillTabs(
                     items = listOf(ImageFormat.Png to R.string.im_fmt_png, ImageFormat.Webp to R.string.im_fmt_webp),
@@ -633,23 +680,15 @@ private fun ExportDialog(state: IconMakerViewModel.UiState, vm: IconMakerViewMod
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (e.kind == ExportKind.Apply) {
-                    HorizontalDivider()
-                    Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
-                        for (t in e.targets) {
-                            Column(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.applyTo(t) }.padding(horizontal = 8.dp, vertical = 10.dp),
-                            ) {
-                                Text(t.name, style = MaterialTheme.typography.bodyLarge)
-                                Text(t.root.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                            }
-                        }
-                    }
-                }
             }
         },
         confirmButton = {
-            if (e.kind == ExportKind.Zip) TextButton(onClick = vm::saveZip) { Text(stringResource(R.string.im_save)) }
+            val canGo = !isApp || o.any
+            if (e.kind == ExportKind.Zip) {
+                TextButton(onClick = vm::saveZip, enabled = canGo) { Text(stringResource(R.string.im_save)) }
+            } else {
+                TextButton(onClick = { e.selected?.let(vm::applyTo) }, enabled = canGo && e.selected != null) { Text(stringResource(R.string.im_apply)) }
+            }
         },
         dismissButton = { TextButton(onClick = vm::dismissExport) { Text(stringResource(R.string.action_cancel)) } },
     )

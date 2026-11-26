@@ -19,6 +19,7 @@ import com.invictus.kodex.ai.agent.AppIconApplier
 import com.invictus.kodex.core.iconmaker.BgKind
 import com.invictus.kodex.core.iconmaker.GlyphKind
 import com.invictus.kodex.core.iconmaker.IconExporter
+import com.invictus.kodex.core.iconmaker.IconOptions
 import com.invictus.kodex.core.iconmaker.IconRenderer
 import com.invictus.kodex.core.iconmaker.IconSpec
 import com.invictus.kodex.core.iconmaker.ImageFormat
@@ -54,10 +55,11 @@ class IconMakerViewModel(
 
     class Layers(val bg: ImageBitmap, val fg: ImageBitmap, val mono: ImageBitmap)
 
-    class Target(val root: File, val name: String)
+    /** [detected]: what the project's launcher icon currently consists of. */
+    class Target(val root: File, val name: String, val detected: IconOptions = IconOptions.ALL)
 
     /** The export dialog: Save ZIP, or Apply to one of [targets]. */
-    class ExportDialogState(val kind: ExportKind, val targets: List<Target> = emptyList())
+    class ExportDialogState(val kind: ExportKind, val targets: List<Target> = emptyList(), val selected: Target? = null)
 
     data class UiState(
         val mode: MakerMode = MakerMode.App,
@@ -72,6 +74,8 @@ class IconMakerViewModel(
         val busy: Boolean = false,
         val export: ExportDialogState? = null,
         val format: ImageFormat = ImageFormat.Png,
+        /** Which parts of the app icon to write; preset from the chosen project. */
+        val options: IconOptions = IconOptions.ALL,
         /** Preview wallpaper: a built-in preset, or [wallpaper] (picked image / the phone's own) when set. */
         val wallpaperPreset: Int = 0,
         val wallpaper: ImageBitmap? = null,
@@ -177,12 +181,22 @@ class IconMakerViewModel(
 
     fun setFormat(format: ImageFormat) = _ui.update { it.copy(format = format) }
 
+    fun setOptions(options: IconOptions) = _ui.update {
+        // the monochrome layer lives inside the adaptive icon
+        it.copy(options = if (options.adaptive) options else options.copy(themed = false))
+    }
+
+    /** Picks the project to apply to and presets the chips from what it already has. */
+    fun selectTarget(t: Target) = _ui.update { st ->
+        st.copy(export = st.export?.let { ExportDialogState(it.kind, it.targets, t) }, options = t.detected)
+    }
+
     fun dismissExport() = _ui.update { it.copy(export = null) }
 
     /** Opens the export dialog. Apply lists recent projects that are Android apps. */
     fun openExport(kind: ExportKind) {
         if (kind == ExportKind.Zip) {
-            _ui.update { it.copy(export = ExportDialogState(ExportKind.Zip)) }
+            _ui.update { it.copy(export = ExportDialogState(ExportKind.Zip), options = IconOptions.ALL) }
             return
         }
         viewModelScope.launch {
@@ -191,10 +205,10 @@ class IconMakerViewModel(
                     .map { it.file }
                     .filter { it.isDirectory && AppIconApplier.findMain(it) != null }
                     .take(12)
-                    .map { Target(it, it.name) }
+                    .map { dir -> Target(dir, dir.name, AppIconApplier.findMain(dir)?.let { IconExporter.detect(it) } ?: IconOptions.ALL) }
             }
             if (found.isEmpty()) _effects.send(app.getString(R.string.im_no_projects))
-            else _ui.update { it.copy(export = ExportDialogState(ExportKind.Apply, found)) }
+            else _ui.update { it.copy(export = ExportDialogState(ExportKind.Apply, found, found.first()), options = found.first().detected) }
         }
     }
 
@@ -204,7 +218,7 @@ class IconMakerViewModel(
         runBusy {
             val result = runCatching {
                 val main = AppIconApplier.findMain(target.root) ?: error("No Android app module")
-                if (s.mode == MakerMode.App) IconExporter.write(main, s.spec, target.root, s.format)
+                if (s.mode == MakerMode.App) IconExporter.write(main, s.spec, target.root, s.format, s.options)
                 else IconExporter.writeNotification(main, s.spec, s.notif, target.root, s.format)
             }
             _effects.send(
@@ -229,7 +243,7 @@ class IconMakerViewModel(
             val dir = File(app.cacheDir, "iconmaker/$stamp")
             val zip = File(app.cacheDir, "iconmaker/$name")
             val ok = runCatching {
-                if (s.mode == MakerMode.App) IconExporter.write(dir, s.spec, format = s.format)
+                if (s.mode == MakerMode.App) IconExporter.write(dir, s.spec, format = s.format, options = s.options)
                 else IconExporter.writeNotification(dir, s.spec, s.notif, format = s.format)
                 IconExporter.zip(dir, zip)
                 AppIconApplier.saveToDevice(app, zip, name, "application/zip")

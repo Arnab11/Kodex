@@ -79,4 +79,11 @@
     <string name="im_your_theme">Your theme</string>
     <string name="im_zip_failed">Couldn\'t save the ZIP</string>
     <string name="im_zip_saved">Saved %1$s to Download/Kodex</string>
+    <string name="im_opt_title">Include</string>
+    <string name="im_opt_adaptive">Adaptive</string>
+    <string name="im_opt_themed">Themed</string>
+    <string name="im_opt_legacy">Legacy</string>
+    <string name="im_opt_round">Round</string>
+    <string name="im_opt_playstore">Play Store</string>
+    <string name="im_opt_hint">Preset from what this project already has.</string>
 </resources>

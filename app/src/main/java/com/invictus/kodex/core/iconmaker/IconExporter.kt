@@ -14,6 +14,19 @@ import java.util.zip.ZipOutputStream
 /** Image format of the exported bitmaps (the Play Store icon is always PNG). */
 enum class ImageFormat(val ext: String) { Png("png"), Webp("webp") }
 
+/** Which parts of the launcher icon to write. */
+data class IconOptions(
+    val adaptive: Boolean = true,
+    val themed: Boolean = true,
+    val legacy: Boolean = true,
+    val round: Boolean = true,
+    val playStore: Boolean = true,
+) {
+    val any get() = adaptive || legacy || round || playStore
+
+    companion object { val ALL = IconOptions() }
+}
+
 object IconExporter {
     private val DENSITIES = listOf("mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192)
     private const val FG = "ic_launcher_kodex_fg"
@@ -26,12 +39,45 @@ object IconExporter {
         f.outputStream().use { bmp.compress(cf, 100, it) }
     }
 
-    /** Returns the written files, relative to [displayRoot]. [main] is a module's `src/main` directory. */
-    fun write(main: File, spec: IconSpec, displayRoot: File = main, format: ImageFormat = ImageFormat.Png): List<String> {
-        val res = File(main, "res")
+    private fun iconNames(main: File): Pair<String, String> {
         val manifest = File(main, "AndroidManifest.xml").takeIf { it.isFile }?.readText().orEmpty()
-        val name = Regex("""android:icon="@mipmap/([A-Za-z0-9_]+)"""").find(manifest)?.groupValues?.get(1) ?: "ic_launcher"
-        val roundName = Regex("""android:roundIcon="@mipmap/([A-Za-z0-9_]+)"""").find(manifest)?.groupValues?.get(1) ?: "${name}_round"
+        val name = Regex("android:icon=\"@mipmap/([A-Za-z0-9_]+)\"").find(manifest)?.groupValues?.get(1) ?: "ic_launcher"
+        val roundName = Regex("android:roundIcon=\"@mipmap/([A-Za-z0-9_]+)\"").find(manifest)?.groupValues?.get(1) ?: "${name}_round"
+        return name to roundName
+    }
+
+    /**
+     * What the project at [main] already has, so an apply keeps its current behaviour: adaptive XML (and whether
+     * it carries a monochrome layer), legacy and round mipmaps, the Play Store PNG. A bare project gets everything.
+     */
+    fun detect(main: File): IconOptions {
+        val res = File(main, "res")
+        val (name, roundName) = iconNames(main)
+        val manifest = File(main, "AndroidManifest.xml").takeIf { it.isFile }?.readText().orEmpty()
+        val anydpi = res.listFiles { f -> f.isDirectory && f.name.startsWith("mipmap-anydpi") }.orEmpty()
+        val adaptiveXml = anydpi.map { File(it, "$name.xml") }.firstOrNull { it.isFile && it.readText().contains("<adaptive-icon") }
+        val dpiDirs = res.listFiles { f -> f.isDirectory && f.name.startsWith("mipmap-") && !f.name.startsWith("mipmap-anydpi") }.orEmpty()
+        fun has(n: String) = dpiDirs.any { File(it, "$n.png").isFile || File(it, "$n.webp").isFile }
+        val found = IconOptions(
+            adaptive = adaptiveXml != null,
+            themed = adaptiveXml?.readText()?.contains("<monochrome") == true,
+            legacy = has(name),
+            round = manifest.contains("android:roundIcon") || has(roundName),
+            playStore = File(main, "ic_launcher-playstore.png").isFile,
+        )
+        return if (found.any) found else IconOptions.ALL
+    }
+
+    /** Returns the written files, relative to [displayRoot]. [main] is a module's `src/main` directory. */
+    fun write(
+        main: File,
+        spec: IconSpec,
+        displayRoot: File = main,
+        format: ImageFormat = ImageFormat.Png,
+        options: IconOptions = IconOptions.ALL,
+    ): List<String> {
+        val res = File(main, "res")
+        val (name, roundName) = iconNames(main)
 
         val written = ArrayList<String>()
         fun rel(f: File) = f.relativeTo(displayRoot).path.replace(File.separatorChar, '/')
@@ -54,11 +100,13 @@ object IconExporter {
         val fg = IconRenderer.foreground(spec)
         val mono = IconRenderer.foreground(spec, mono = true)
         try {
-            image(File(res, "drawable-nodpi"), FG, fg)
-            image(File(res, "drawable-nodpi"), MONO, mono)
+            if (options.adaptive) {
+                image(File(res, "drawable-nodpi"), FG, fg)
+                if (options.themed) image(File(res, "drawable-nodpi"), MONO, mono)
+            }
 
             val header = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            val bgRef = when (spec.bgKind) {
+            val bgRef = if (!options.adaptive) "" else when (spec.bgKind) {
                 BgKind.None -> {
                     File(res, "drawable/$BG.xml").delete()
                     File(res, "values/$BG.xml").delete()
@@ -81,33 +129,42 @@ object IconExporter {
                 }
             }
 
-            for ((dpi, px) in DENSITIES) {
+            if (options.legacy || options.round) for ((dpi, px) in DENSITIES) {
                 val dir = File(res, "mipmap-$dpi")
-                val square = IconRenderer.composite(bg, fg, spec.legacyShape, px, masked)
-                image(dir, name, square)
-                square.recycle()
-                val round = IconRenderer.composite(bg, fg, IconShape.Circle, px, masked)
-                image(dir, roundName, round)
-                round.recycle()
+                if (options.legacy) {
+                    val square = IconRenderer.composite(bg, fg, spec.legacyShape, px, masked)
+                    image(dir, name, square)
+                    square.recycle()
+                }
+                if (options.round) {
+                    val round = IconRenderer.composite(bg, fg, IconShape.Circle, px, masked)
+                    image(dir, roundName, round)
+                    round.recycle()
+                }
             }
 
-            val xml = header +
-                "<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n" +
-                "    <background android:drawable=\"$bgRef\" />\n" +
-                "    <foreground android:drawable=\"@drawable/$FG\" />\n" +
-                "    <monochrome android:drawable=\"@drawable/$MONO\" />\n" +
-                "</adaptive-icon>\n"
-            val adaptiveDirs = res.listFiles { f -> f.isDirectory && f.name.startsWith("mipmap-anydpi") }.orEmpty().toMutableList()
-            if (adaptiveDirs.isEmpty()) adaptiveDirs += File(res, "mipmap-anydpi-v26")
-            for (d in adaptiveDirs) for (n in listOf(name, roundName)) text(File(d, "$n.xml"), xml)
+            if (options.adaptive) {
+                val xml = header +
+                    "<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n" +
+                    "    <background android:drawable=\"$bgRef\" />\n" +
+                    "    <foreground android:drawable=\"@drawable/$FG\" />\n" +
+                    (if (options.themed) "    <monochrome android:drawable=\"@drawable/$MONO\" />\n" else "") +
+                    "</adaptive-icon>\n"
+                val adaptiveDirs = res.listFiles { f -> f.isDirectory && f.name.startsWith("mipmap-anydpi") }.orEmpty().toMutableList()
+                if (adaptiveDirs.isEmpty()) adaptiveDirs += File(res, "mipmap-anydpi-v26")
+                val xmlNames = if (options.round) listOf(name, roundName) else listOf(name)
+                for (d in adaptiveDirs) for (n in xmlNames) text(File(d, "$n.xml"), xml)
+            }
 
             // The Play Store listing icon is always a PNG.
-            val store = IconRenderer.composite(bg, fg, IconShape.Square, 512, masked)
-            File(main, "ic_launcher-playstore.png").let { f ->
-                compress(store, f, ImageFormat.Png)
-                written += rel(f)
+            if (options.playStore) {
+                val store = IconRenderer.composite(bg, fg, IconShape.Square, 512, masked)
+                File(main, "ic_launcher-playstore.png").let { f ->
+                    compress(store, f, ImageFormat.Png)
+                    written += rel(f)
+                }
+                store.recycle()
             }
-            store.recycle()
         } finally {
             bg.recycle(); fg.recycle(); mono.recycle()
         }

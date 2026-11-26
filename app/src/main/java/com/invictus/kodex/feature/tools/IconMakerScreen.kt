@@ -2,25 +2,37 @@ package com.invictus.kodex.feature.tools
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,15 +43,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -52,19 +65,31 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,9 +97,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.core.iconmaker.BgKind
 import com.invictus.kodex.core.iconmaker.GlyphKind
-import com.invictus.kodex.core.iconmaker.TextFont
+import com.invictus.kodex.core.iconmaker.ImageFormat
 import com.invictus.kodex.core.iconmaker.SymbolLibrary
+import com.invictus.kodex.core.iconmaker.TextFont
 import com.invictus.kodex.ui.icons.XIcons
+import kotlin.math.roundToInt
 
 private const val GRID_COLUMNS = 7
 
@@ -124,21 +151,34 @@ fun IconMakerScreen(
     viewModel: IconMakerViewModel = viewModel(factory = IconMakerViewModel.Factory),
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
-    val spec = state.spec
     val isApp = state.mode == MakerMode.App
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.effects.collect { snackbar.showSnackbar(it) } }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) viewModel.setPicture(uri)
     }
+    val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) viewModel.setWallpaperUri(uri)
+    }
     var preview by rememberSaveable { mutableStateOf(PreviewMode.Home) }
-    var tab by rememberSaveable(state.mode) { mutableStateOf(EditorTab.Icon) }
+    // The editor starts collapsed: the preview gets the whole screen until a tool is tapped.
+    var openTab by rememberSaveable(state.mode) { mutableStateOf<EditorTab?>(null) }
+    var shownTab by remember(state.mode) { mutableStateOf(EditorTab.Icon) }
+    LaunchedEffect(openTab) { openTab?.let { shownTab = it } }
     val tabs = if (isApp) APP_TABS else NOTIF_TABS
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.tools_iconmaker_title)) },
+                title = {
+                    PillTabs(
+                        items = listOf(MakerMode.App to R.string.im_mode_app, MakerMode.Notification to R.string.im_mode_notif),
+                        selected = state.mode,
+                        onSelect = viewModel::setMode,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth().padding(end = 16.dp),
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back)) }
                 },
@@ -146,237 +186,293 @@ fun IconMakerScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            PillTabs(
-                items = listOf(MakerMode.App to R.string.im_mode_app, MakerMode.Notification to R.string.im_mode_notif),
-                selected = state.mode,
-                onSelect = viewModel::setMode,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-
-            // The preview never scrolls away while you edit. Mode pills float over its bottom edge.
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-            ) {
-                if (isApp) {
-                    Box {
-                        IconPreview(
-                            mode = preview,
-                            layers = state.layers,
-                            shape = spec.legacyShape,
-                            onShape = { s -> viewModel.edit { copy(legacyShape = s) } },
-                        )
-                        PillTabs(
-                            items = PreviewMode.entries.map { it to it.label },
-                            selected = preview,
-                            onSelect = { preview = it },
-                            compact = true,
-                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
-                        )
-                    }
-                } else {
-                    Box(Modifier.fillMaxWidth().height(172.dp)) {
-                        NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
-                    }
-                }
-            }
-
-            // Editor sheet: tabs on top, only the body below them scrolls.
-            Surface(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-            ) {
-                Column(Modifier.fillMaxSize()) {
-                    EditorTabs(tabs, tab) { tab = it }
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        when (tab) {
-                            EditorTab.Icon -> IconTab(state, viewModel) { picker.launch("image/*") }
-                            EditorTab.Colors -> Panel {
-                                SectionTitle(R.string.im_quick_styles)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    items(QUICK_STYLES) { q -> QuickStyleTile(q) { viewModel.applyStyle(q.fg, q.bg1, q.bg2) } }
-                                }
-                                SectionTitle(R.string.im_section_icon_color)
-                                ColorEditor(spec.fgColor) { c -> viewModel.edit { copy(fgColor = c) } }
-                                if (spec.kind == GlyphKind.Picture) {
-                                    SwitchRow(R.string.im_tint_image, spec.tintPicture) { viewModel.edit { copy(tintPicture = it) } }
-                                }
-                                SectionTitle(R.string.im_section_bg)
-                                PillTabs(
-                                    items = listOf(BgKind.Solid to R.string.im_bg_solid, BgKind.Gradient to R.string.im_bg_gradient),
-                                    selected = spec.bgKind,
-                                    onSelect = { k -> viewModel.edit { copy(bgKind = k) } },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                ColorEditor(spec.bg1) { c -> viewModel.edit { copy(bg1 = c) } }
-                                if (spec.bgKind == BgKind.Gradient) {
-                                    Label(R.string.im_bg_color2)
-                                    ColorEditor(spec.bg2) { c -> viewModel.edit { copy(bg2 = c) } }
-                                    ValueSlider(
-                                        label = stringResource(R.string.im_bg_angle_label),
-                                        value = "${spec.bgAngle}°",
-                                        position = spec.bgAngle / 45f,
-                                        range = 0f..7f,
-                                        steps = 6,
-                                    ) { v -> viewModel.edit { copy(bgAngle = (v.toInt() * 45) % 360) } }
-                                }
-                            }
-                            EditorTab.Size -> Panel {
-                                if (isApp) {
-                                    IntSlider(R.string.im_size, spec.sizePct, 30..130) { viewModel.edit { copy(sizePct = it) } }
-                                    IntSlider(R.string.im_offset_x, spec.offsetXPct, -30..30) { viewModel.edit { copy(offsetXPct = it) } }
-                                    IntSlider(R.string.im_offset_y, spec.offsetYPct, -30..30) { viewModel.edit { copy(offsetYPct = it) } }
-                                    SwitchRow(R.string.im_shadow, spec.shadow) { viewModel.edit { copy(shadow = it) } }
-                                    TextButton(onClick = { viewModel.edit { copy(sizePct = 80, offsetXPct = 0, offsetYPct = 0) } }) {
-                                        Text(stringResource(R.string.im_reset))
-                                    }
-                                } else {
-                                    val n = state.notif
-                                    IntSlider(R.string.im_size, n.sizePct, 40..100) { viewModel.editNotif { copy(sizePct = it) } }
-                                    IntSlider(R.string.im_offset_x, n.offsetXPct, -20..20) { viewModel.editNotif { copy(offsetXPct = it) } }
-                                    IntSlider(R.string.im_offset_y, n.offsetYPct, -20..20) { viewModel.editNotif { copy(offsetYPct = it) } }
-                                    TextButton(onClick = { viewModel.editNotif { copy(sizePct = 86, offsetXPct = 0, offsetYPct = 0) } }) {
-                                        Text(stringResource(R.string.im_reset))
-                                    }
-                                }
-                            }
-                            EditorTab.Name -> Panel {
-                                OutlinedTextField(
-                                    value = state.notif.name,
-                                    onValueChange = { v -> viewModel.editNotif { copy(name = v.take(40)) } },
-                                    singleLine = true,
-                                    label = { Text(stringResource(R.string.im_notif_name)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Text(
-                                    stringResource(R.string.im_notif_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                SectionTitle(R.string.im_notif_accent)
-                                ColorEditor(state.notif.accent) { c -> viewModel.editNotif { copy(accent = c) } }
-                            }
-                        }
-                    }
-                    ActionBar(busy = state.busy, onSave = viewModel::saveZip, onApply = viewModel::requestApply)
-                }
+        BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
+            val panelHeight = (maxHeight * 0.42f).coerceIn(230.dp, 360.dp)
+            Column(Modifier.fillMaxSize()) {
+                PreviewCard(
+                    state = state,
+                    preview = preview,
+                    onPreview = { preview = it },
+                    vm = viewModel,
+                    pickWallpaper = { wallpaperPicker.launch("image/*") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                EditorDock(
+                    tabs = tabs,
+                    openTab = openTab,
+                    contentTab = openTab ?: shownTab,
+                    panelHeight = panelHeight,
+                    onToggle = { t -> openTab = if (openTab == t) null else t },
+                    busy = state.busy,
+                    onSave = { viewModel.openExport(ExportKind.Zip) },
+                    onApply = { viewModel.openExport(ExportKind.Apply) },
+                ) { tab -> TabPanel(tab, state, viewModel, isApp) { imagePicker.launch("image/*") } }
             }
         }
     }
 
-    state.targets?.let { targets ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissTargets,
-            title = { Text(stringResource(R.string.im_pick_project)) },
-            text = {
-                Column {
-                    for (t in targets) {
-                        Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { viewModel.applyTo(t) }.padding(horizontal = 8.dp, vertical = 10.dp),
-                        ) {
-                            Text(t.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(t.root.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = viewModel::dismissTargets) { Text(stringResource(R.string.action_cancel)) } },
-        )
+    ExportDialog(state, viewModel)
+}
+
+// ---- Preview card -------------------------------------------------------------------------------------------
+
+@Composable
+private fun PreviewCard(
+    state: IconMakerViewModel.UiState,
+    preview: PreviewMode,
+    onPreview: (PreviewMode) -> Unit,
+    vm: IconMakerViewModel,
+    pickWallpaper: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(modifier, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        if (state.mode == MakerMode.App) {
+            Box(Modifier.fillMaxSize()) {
+                // a real-looking wallpaper behind all three previews
+                WallpaperCanvas(state.wallpaperPreset, state.wallpaper, Modifier.fillMaxSize())
+                IconPreview(
+                    mode = preview,
+                    layers = state.layers,
+                    shape = state.spec.legacyShape,
+                    onShape = { s -> vm.edit { copy(legacyShape = s) } },
+                    light = wallpaperIsLight(state.wallpaperPreset, state.wallpaper),
+                    modifier = Modifier.fillMaxSize(),
+                )
+                WallpaperButton(state, vm, pickWallpaper, Modifier.align(Alignment.TopEnd).padding(top = 34.dp, end = 10.dp))
+                PillTabs(
+                    items = PreviewMode.entries.map { it to it.label },
+                    selected = preview,
+                    onSelect = onPreview,
+                    compact = true,
+                    glass = true,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
+                )
+            }
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                NotificationPreview(glyph = state.notifGlyph, accent = Color(state.notif.accent))
+            }
+        }
     }
 }
 
 @Composable
-private fun ActionBar(busy: Boolean, onSave: () -> Unit, onApply: () -> Unit) {
+private fun WallpaperButton(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, pickWallpaper: () -> Unit, modifier: Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(Color(0x66000000)).clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(XIcons.Image, contentDescription = stringResource(R.string.im_wallpaper), tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.im_wallpaper), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (i in 0 until WALLPAPER_COUNT) {
+                        val selected = state.wallpaper == null && state.wallpaperPreset == i
+                        Box(
+                            Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                .clickable {
+                                    vm.setWallpaperPreset(i)
+                                    open = false
+                                },
+                        ) { WallpaperCanvas(i, null, Modifier.fillMaxSize()) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        open = false
+                        pickWallpaper()
+                    }) { Text(stringResource(R.string.im_wp_gallery)) }
+                    if (state.systemWallpaper != null) {
+                        TextButton(onClick = {
+                            vm.useSystemWallpaper()
+                            open = false
+                        }) { Text(stringResource(R.string.im_wp_system)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---- Editor dock (collapsed tools row + expandable panel + export) ----------------------------------------
+
+@Composable
+private fun EditorDock(
+    tabs: List<EditorTab>,
+    openTab: EditorTab?,
+    contentTab: EditorTab,
+    panelHeight: Dp,
+    onToggle: (EditorTab) -> Unit,
+    busy: Boolean,
+    onSave: () -> Unit,
+    onApply: () -> Unit,
+    panel: @Composable (EditorTab) -> Unit,
+) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column {
+            AnimatedVisibility(visible = openTab != null, enter = expandVertically(), exit = shrinkVertically()) {
+                Column {
+                    Box(Modifier.fillMaxWidth().height(panelHeight)) { panel(contentTab) }
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (t in tabs) ToolButton(t, selected = t == openTab, modifier = Modifier.weight(1f)) { onToggle(t) }
+            }
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = onSave, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
+                    Text(stringResource(R.string.im_save_zip), maxLines = 1)
+                }
+                Button(onClick = onApply, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text(stringResource(R.string.im_apply), maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** One of the collapsed tools; tapping opens (or closes) its panel, and the chevron turns over. */
+@Composable
+private fun ToolButton(tab: EditorTab, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val bg by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        label = "tool-bg",
+    )
+    val turn by animateFloatAsState(if (selected) 180f else 0f, label = "tool-chevron")
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier.clip(RoundedCornerShape(18.dp)).background(bg).clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedButton(onClick = onSave, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
-            Text(stringResource(R.string.im_save_zip), maxLines = 1)
-        }
-        Button(onClick = onApply, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp)) {
-            if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text(stringResource(R.string.im_apply), maxLines = 1)
+        Text(stringResource(tab.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = fg)
+        Spacer(Modifier.width(6.dp))
+        Canvas(Modifier.size(10.dp)) {
+            rotate(turn) {
+                val p = Path().apply {
+                    moveTo(size.width * 0.1f, size.height * 0.3f)
+                    lineTo(size.width * 0.5f, size.height * 0.75f)
+                    lineTo(size.width * 0.9f, size.height * 0.3f)
+                }
+                drawPath(p, fg, style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
         }
     }
 }
 
-/** A rounded segmented control: one pill highlights the current choice. */
+// ---- Panels -------------------------------------------------------------------------------------------------
+
 @Composable
-private fun <T> PillTabs(
-    items: List<Pair<T, Int>>,
-    selected: T,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-    scrollable: Boolean = false,
-    compact: Boolean = false,
+private fun TabPanel(
+    tab: EditorTab,
+    state: IconMakerViewModel.UiState,
+    vm: IconMakerViewModel,
+    isApp: Boolean,
+    pickImage: () -> Unit,
 ) {
-    Row(
-        modifier
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(3.dp)
-            .then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        for ((value, label) in items) {
-            val sel = value == selected
-            Box(
-                Modifier
-                    .then(if (scrollable) Modifier else Modifier.weight(1f))
-                    .clip(CircleShape)
-                    .background(if (sel) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { onSelect(value) }
-                    .padding(horizontal = 14.dp, vertical = if (compact) 6.dp else 9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    stringResource(label),
-                    style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
-                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (sel) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
+    val spec = state.spec
+    when (tab) {
+        EditorTab.Icon -> IconTab(state, vm, pickImage)
+        EditorTab.Colors -> Panel {
+            SectionTitle(R.string.im_quick_styles)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(QUICK_STYLES) { q -> QuickStyleTile(q) { vm.applyStyle(q.fg, q.bg1, q.bg2) } }
             }
+            SectionTitle(R.string.im_section_icon_color)
+            ColorEditor(spec.fgColor) { c -> vm.edit { copy(fgColor = c) } }
+            if (spec.kind == GlyphKind.Picture) {
+                SwitchRow(R.string.im_tint_image, spec.tintPicture) { vm.edit { copy(tintPicture = it) } }
+            }
+            SectionTitle(R.string.im_section_bg)
+            PillTabs(
+                items = listOf(BgKind.None to R.string.im_bg_none, BgKind.Solid to R.string.im_bg_solid, BgKind.Gradient to R.string.im_bg_gradient),
+                selected = spec.bgKind,
+                onSelect = { k -> vm.edit { copy(bgKind = k) } },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            when (spec.bgKind) {
+                BgKind.None -> Text(
+                    stringResource(R.string.im_bg_none_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                BgKind.Solid -> ColorEditor(spec.bg1) { c -> vm.edit { copy(bg1 = c) } }
+                BgKind.Gradient -> {
+                    ColorEditor(spec.bg1) { c -> vm.edit { copy(bg1 = c) } }
+                    Label(R.string.im_bg_color2)
+                    ColorEditor(spec.bg2) { c -> vm.edit { copy(bg2 = c) } }
+                    ExpressiveSlider(
+                        label = stringResource(R.string.im_bg_angle_label),
+                        valueText = "${spec.bgAngle}°",
+                        value = spec.bgAngle / 45f,
+                        range = 0f..7f,
+                        steps = 6,
+                    ) { v -> vm.edit { copy(bgAngle = (v.roundToInt() * 45) % 360) } }
+                }
+            }
+        }
+        EditorTab.Size -> Panel {
+            if (isApp) {
+                IntSlider(R.string.im_size, spec.sizePct, 30..130) { vm.edit { copy(sizePct = it) } }
+                IntSlider(R.string.im_offset_x, spec.offsetXPct, -30..30) { vm.edit { copy(offsetXPct = it) } }
+                IntSlider(R.string.im_offset_y, spec.offsetYPct, -30..30) { vm.edit { copy(offsetYPct = it) } }
+                SwitchRow(R.string.im_shadow, spec.shadow) { vm.edit { copy(shadow = it) } }
+                TextButton(onClick = { vm.edit { copy(sizePct = 80, offsetXPct = 0, offsetYPct = 0) } }) {
+                    Text(stringResource(R.string.im_reset))
+                }
+            } else {
+                val n = state.notif
+                IntSlider(R.string.im_size, n.sizePct, 40..100) { vm.editNotif { copy(sizePct = it) } }
+                IntSlider(R.string.im_offset_x, n.offsetXPct, -20..20) { vm.editNotif { copy(offsetXPct = it) } }
+                IntSlider(R.string.im_offset_y, n.offsetYPct, -20..20) { vm.editNotif { copy(offsetYPct = it) } }
+                TextButton(onClick = { vm.editNotif { copy(sizePct = 86, offsetXPct = 0, offsetYPct = 0) } }) {
+                    Text(stringResource(R.string.im_reset))
+                }
+            }
+        }
+        EditorTab.Name -> Panel {
+            OutlinedTextField(
+                value = state.notif.name,
+                onValueChange = { v -> vm.editNotif { copy(name = v.take(40)) } },
+                singleLine = true,
+                label = { Text(stringResource(R.string.im_notif_name)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.im_notif_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SectionTitle(R.string.im_notif_accent)
+            ColorEditor(state.notif.accent) { c -> vm.editNotif { copy(accent = c) } }
         }
     }
 }
 
-@Composable
-private fun EditorTabs(tabs: List<EditorTab>, selected: EditorTab, onSelect: (EditorTab) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        for (t in tabs) {
-            val sel = t == selected
-            Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { onSelect(t) }.padding(vertical = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    stringResource(t.label),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(5.dp))
-                Box(
-                    Modifier.height(3.dp).width(28.dp).clip(CircleShape)
-                        .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent),
-                )
-            }
-        }
-    }
-}
-
-/** A tab body that scrolls on its own (the preview and the tabs stay put). */
+/** A panel body that scrolls on its own (the preview and the tools row stay put). */
 @Composable
 private fun Panel(content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) { content() }
 }
@@ -409,10 +505,13 @@ private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, p
                     Source.Image -> if (state.hasPicture) vm.edit { copy(kind = GlyphKind.Picture) } else pickImage()
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         )
         when (source) {
-            Source.Text -> Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Source.Text -> Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 OutlinedTextField(
                     value = spec.text,
                     onValueChange = { v -> vm.edit { copy(text = v.take(3), kind = GlyphKind.Text) } },
@@ -432,9 +531,23 @@ private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, p
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Source.Image -> Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Source.Image -> Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 FilledTonalButton(onClick = pickImage) {
                     Text(stringResource(if (state.hasPicture) R.string.im_change_image else R.string.im_pick_image))
+                }
+                if (state.hasPicture) {
+                    SwitchRow(R.string.im_cutout, spec.cutout) { vm.edit { copy(cutout = it) } }
+                    if (spec.cutout) {
+                        ExpressiveSlider(
+                            label = stringResource(R.string.im_cutout_tolerance),
+                            valueText = "${spec.cutoutTolerance}%",
+                            value = spec.cutoutTolerance.toFloat(),
+                            range = 0f..100f,
+                        ) { v -> vm.edit { copy(cutoutTolerance = v.roundToInt()) } }
+                    }
                 }
                 Text(
                     stringResource(R.string.im_image_hint),
@@ -497,6 +610,183 @@ private fun symbolRows(all: List<SymbolLibrary.Symbol>, query: String): List<Lis
     return list.chunked(GRID_COLUMNS)
 }
 
+// ---- Export dialog ------------------------------------------------------------------------------------------
+
+@Composable
+private fun ExportDialog(state: IconMakerViewModel.UiState, vm: IconMakerViewModel) {
+    val e = state.export ?: return
+    AlertDialog(
+        onDismissRequest = vm::dismissExport,
+        title = { Text(stringResource(if (e.kind == ExportKind.Zip) R.string.im_save_zip else R.string.im_pick_project)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.im_export_format), style = MaterialTheme.typography.labelLarge)
+                PillTabs(
+                    items = listOf(ImageFormat.Png to R.string.im_fmt_png, ImageFormat.Webp to R.string.im_fmt_webp),
+                    selected = state.format,
+                    onSelect = vm::setFormat,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.im_fmt_caption),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (e.kind == ExportKind.Apply) {
+                    HorizontalDivider()
+                    Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                        for (t in e.targets) {
+                            Column(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.applyTo(t) }.padding(horizontal = 8.dp, vertical = 10.dp),
+                            ) {
+                                Text(t.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(t.root.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (e.kind == ExportKind.Zip) TextButton(onClick = vm::saveZip) { Text(stringResource(R.string.im_save)) }
+        },
+        dismissButton = { TextButton(onClick = vm::dismissExport) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+// ---- Building blocks ----------------------------------------------------------------------------------------
+
+/** A rounded segmented control: one pill highlights the current choice. [glass] is the translucent look for use over a wallpaper. */
+@Composable
+private fun <T> PillTabs(
+    items: List<Pair<T, Int>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    glass: Boolean = false,
+) {
+    val cs = MaterialTheme.colorScheme
+    val container = if (glass) Color(0x66000000) else cs.surfaceContainerHigh
+    val pill = if (glass) Color(0x40FFFFFF) else cs.primaryContainer
+    Row(
+        modifier.clip(CircleShape).background(container).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        for ((value, label) in items) {
+            val sel = value == selected
+            val text = when {
+                glass -> if (sel) Color.White else Color(0xCCFFFFFF)
+                sel -> cs.onPrimaryContainer
+                else -> cs.onSurfaceVariant
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(CircleShape)
+                    .background(if (sel) pill else Color.Transparent)
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 10.dp, vertical = if (compact) 7.dp else 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(label),
+                    style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                    color = text,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Material 3 Expressive style slider: a tall pill whose filled part carries the label and the value, with a
+ * handle at the end of the fill. Tap or drag anywhere on it.
+ */
+@Composable
+private fun ExpressiveSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+    onChange: (Float) -> Unit,
+) {
+    val span = range.endInclusive - range.start
+    val fraction = ((value - range.start) / span).coerceIn(0f, 1f)
+    var widthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val currentOnChange by rememberUpdatedState(onChange)
+    val cs = MaterialTheme.colorScheme
+
+    fun update(x: Float) {
+        if (widthPx <= 0) return
+        var f = (x / widthPx).coerceIn(0f, 1f)
+        if (steps > 0) {
+            val n = steps + 1
+            f = (f * n).roundToInt() / n.toFloat()
+        }
+        currentOnChange(range.start + f * span)
+    }
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(cs.surfaceContainerHighest)
+            .onSizeChanged { widthPx = it.width }
+            .pointerInput(range.start, span, steps) { detectTapGestures { update(it.x) } }
+            .pointerInput(range.start, span, steps) {
+                detectHorizontalDragGestures(onDragStart = { update(it.x) }) { change, _ ->
+                    change.consume()
+                    update(change.position.x)
+                }
+            },
+    ) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(cs.primary))
+        SliderLabels(label, valueText, cs.onSurface, Modifier.matchParentSize())
+        // the same labels again in the "on primary" colour, visible only over the filled part
+        Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).clipToBounds()) {
+            SliderLabels(
+                label,
+                valueText,
+                cs.onPrimary,
+                Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(with(density) { widthPx.toDp() }).fillMaxHeight(),
+            )
+        }
+        val handleEdge = with(density) { 14.dp.roundToPx() }
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset { IntOffset((widthPx * fraction).roundToInt() - handleEdge, 0) }
+                .size(width = 4.dp, height = 30.dp)
+                .clip(CircleShape)
+                .background(cs.onPrimary),
+        )
+    }
+}
+
+@Composable
+private fun SliderLabels(label: String, valueText: String, color: Color, modifier: Modifier) {
+    Row(modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(valueText, color = color, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun IntSlider(label: Int, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    ExpressiveSlider(
+        label = stringResource(label),
+        valueText = "$value%",
+        value = value.toFloat(),
+        range = range.first.toFloat()..range.last.toFloat(),
+    ) { onChange(it.roundToInt()) }
+}
+
 /** A letter style, shown as "Aa" in that style. */
 @Composable
 private fun FontTile(font: TextFont, selected: Boolean, onClick: () -> Unit) {
@@ -545,28 +835,6 @@ private fun SwitchRow(label: Int, checked: Boolean, onChange: (Boolean) -> Unit)
         Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
     }
-}
-
-/** Label on the left, current value on the right, slider below. */
-@Composable
-private fun ValueSlider(label: String, value: String, position: Float, range: ClosedFloatingPointRange<Float>, steps: Int = 0, onChange: (Float) -> Unit) {
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(value, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        }
-        Slider(value = position, onValueChange = onChange, valueRange = range, steps = steps)
-    }
-}
-
-@Composable
-private fun IntSlider(label: Int, value: Int, range: IntRange, onChange: (Int) -> Unit) {
-    ValueSlider(
-        label = stringResource(label),
-        value = "$value%",
-        position = value.toFloat(),
-        range = range.first.toFloat()..range.last.toFloat(),
-    ) { onChange(it.toInt()) }
 }
 
 @Composable

@@ -1,11 +1,13 @@
 package com.invictus.kodex.feature.tools
 
 import android.app.Application
+import android.app.WallpaperManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -19,6 +21,7 @@ import com.invictus.kodex.core.iconmaker.GlyphKind
 import com.invictus.kodex.core.iconmaker.IconExporter
 import com.invictus.kodex.core.iconmaker.IconRenderer
 import com.invictus.kodex.core.iconmaker.IconSpec
+import com.invictus.kodex.core.iconmaker.ImageFormat
 import com.invictus.kodex.core.iconmaker.NotifSpec
 import com.invictus.kodex.core.iconmaker.SymbolLibrary
 import com.invictus.kodex.core.project.ProjectRepository
@@ -37,6 +40,8 @@ import kotlinx.coroutines.withContext
 
 enum class MakerMode { App, Notification }
 
+enum class ExportKind { Zip, Apply }
+
 /**
  * Icon maker: edits an [IconSpec] (launcher icon) and a [NotifSpec] (status-bar icon) that share one glyph,
  * renders what the previews need off the main thread (a newer edit cancels the one in flight) and exports /
@@ -51,6 +56,9 @@ class IconMakerViewModel(
 
     class Target(val root: File, val name: String)
 
+    /** The export dialog: Save ZIP, or Apply to one of [targets]. */
+    class ExportDialogState(val kind: ExportKind, val targets: List<Target> = emptyList())
+
     data class UiState(
         val mode: MakerMode = MakerMode.App,
         val spec: IconSpec = IconSpec(),
@@ -62,8 +70,12 @@ class IconMakerViewModel(
         val symbolsLoading: Boolean = true,
         val hasPicture: Boolean = false,
         val busy: Boolean = false,
-        /** Non-null while the "apply to which project" dialog is up. */
-        val targets: List<Target>? = null,
+        val export: ExportDialogState? = null,
+        val format: ImageFormat = ImageFormat.Png,
+        /** Preview wallpaper: a built-in preset, or [wallpaper] (picked image / the phone's own) when set. */
+        val wallpaperPreset: Int = 0,
+        val wallpaper: ImageBitmap? = null,
+        val systemWallpaper: ImageBitmap? = null,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -88,6 +100,18 @@ class IconMakerViewModel(
                 val (layers, glyph) = withContext(Dispatchers.Default) { render(i) }
                 _ui.update { it.copy(layers = layers, notifGlyph = glyph) }
             }
+        }
+        // The phone's own wallpaper, when the system lets us read it (often it does not: then the option is hidden).
+        viewModelScope.launch(Dispatchers.IO) {
+            val bmp = runCatching {
+                val d = WallpaperManager.getInstance(app).peekDrawable()
+                if (d == null || d.intrinsicWidth <= 0 || d.intrinsicHeight <= 0) null
+                else {
+                    val w = 720
+                    d.toBitmap(w, (w.toFloat() * d.intrinsicHeight / d.intrinsicWidth).toInt().coerceIn(1, 2400))
+                }
+            }.getOrNull()
+            if (bmp != null) _ui.update { it.copy(systemWallpaper = bmp.asImageBitmap()) }
         }
     }
 
@@ -132,10 +156,35 @@ class IconMakerViewModel(
         }
     }
 
-    fun dismissTargets() = _ui.update { it.copy(targets = null) }
+    // ---- preview wallpaper ----
 
-    /** Shows the project picker: recent projects that are Android apps. */
-    fun requestApply() {
+    fun setWallpaperPreset(index: Int) = _ui.update { it.copy(wallpaperPreset = index, wallpaper = null) }
+
+    fun useSystemWallpaper() = _ui.update { s -> s.copy(wallpaper = s.systemWallpaper ?: s.wallpaper) }
+
+    fun setWallpaperUri(uri: Uri) {
+        viewModelScope.launch {
+            val bmp = withContext(Dispatchers.IO) { decode(uri) }
+            if (bmp == null) {
+                _effects.send(app.getString(R.string.im_image_failed))
+                return@launch
+            }
+            _ui.update { it.copy(wallpaper = bmp.asImageBitmap()) }
+        }
+    }
+
+    // ---- export ----
+
+    fun setFormat(format: ImageFormat) = _ui.update { it.copy(format = format) }
+
+    fun dismissExport() = _ui.update { it.copy(export = null) }
+
+    /** Opens the export dialog. Apply lists recent projects that are Android apps. */
+    fun openExport(kind: ExportKind) {
+        if (kind == ExportKind.Zip) {
+            _ui.update { it.copy(export = ExportDialogState(ExportKind.Zip)) }
+            return
+        }
         viewModelScope.launch {
             val found = withContext(Dispatchers.IO) {
                 projects.recents.first()
@@ -145,18 +194,18 @@ class IconMakerViewModel(
                     .map { Target(it, it.name) }
             }
             if (found.isEmpty()) _effects.send(app.getString(R.string.im_no_projects))
-            else _ui.update { it.copy(targets = found) }
+            else _ui.update { it.copy(export = ExportDialogState(ExportKind.Apply, found)) }
         }
     }
 
     fun applyTo(target: Target) {
-        dismissTargets()
+        val s = _ui.value
+        dismissExport()
         runBusy {
-            val s = _ui.value
             val result = runCatching {
                 val main = AppIconApplier.findMain(target.root) ?: error("No Android app module")
-                if (s.mode == MakerMode.App) IconExporter.write(main, s.spec, target.root)
-                else IconExporter.writeNotification(main, s.spec, s.notif, target.root)
+                if (s.mode == MakerMode.App) IconExporter.write(main, s.spec, target.root, s.format)
+                else IconExporter.writeNotification(main, s.spec, s.notif, target.root, s.format)
             }
             _effects.send(
                 result.fold(
@@ -172,15 +221,16 @@ class IconMakerViewModel(
 
     /** res/ (+ Play Store icon) as a ZIP in Download/Kodex, ready to copy over a project's src/main. */
     fun saveZip() {
+        val s = _ui.value
+        dismissExport()
         runBusy {
-            val s = _ui.value
             val stamp = System.currentTimeMillis()
             val name = (if (s.mode == MakerMode.App) "Kodex-icon-" else "Kodex-notification-icon-") + "${stamp / 1000}.zip"
             val dir = File(app.cacheDir, "iconmaker/$stamp")
             val zip = File(app.cacheDir, "iconmaker/$name")
             val ok = runCatching {
-                if (s.mode == MakerMode.App) IconExporter.write(dir, s.spec)
-                else IconExporter.writeNotification(dir, s.spec, s.notif)
+                if (s.mode == MakerMode.App) IconExporter.write(dir, s.spec, format = s.format)
+                else IconExporter.writeNotification(dir, s.spec, s.notif, format = s.format)
                 IconExporter.zip(dir, zip)
                 AppIconApplier.saveToDevice(app, zip, name, "application/zip")
             }.getOrDefault(false)

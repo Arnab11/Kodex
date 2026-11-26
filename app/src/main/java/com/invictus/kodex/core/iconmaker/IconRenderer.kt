@@ -68,6 +68,7 @@ object IconRenderer {
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         when (spec.bgKind) {
+            BgKind.None -> Unit // stays transparent
             BgKind.Solid -> c.drawColor(spec.bg1)
             BgKind.Gradient -> {
                 val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -103,7 +104,7 @@ object IconRenderer {
         when (spec.kind) {
             GlyphKind.Symbol -> SymbolLibrary.path(spec.symbol)?.let { drawSymbol(c, it, rect, paint) }
             GlyphKind.Text -> drawText(c, spec.text, spec.font, rect, paint)
-            GlyphKind.Picture -> spec.picture?.let { drawPicture(c, it, rect, spec, mono) }
+            GlyphKind.Picture -> pictureOf(spec)?.let { drawPicture(c, it, rect, spec, mono) }
         }
         return bmp
     }
@@ -123,19 +124,32 @@ object IconRenderer {
         when (spec.kind) {
             GlyphKind.Symbol -> SymbolLibrary.path(spec.symbol)?.let { drawSymbol(c, it, rect, paint) }
             GlyphKind.Text -> drawText(c, spec.text, spec.font, rect, paint)
-            GlyphKind.Picture -> spec.picture?.let { drawPicture(c, it, rect, spec, mono = true) }
+            GlyphKind.Picture -> pictureOf(spec)?.let { drawPicture(c, it, rect, spec, mono = true) }
         }
         return bmp
     }
 
-    /** A finished launcher icon: the visible 72dp window of both layers, cut by [shape]. */
-    fun composite(bg: Bitmap, fg: Bitmap, shape: IconShape, outPx: Int): Bitmap {
+    /** The imported image, with its background erased when the spec asks for it. */
+    private fun pictureOf(spec: IconSpec): Bitmap? {
+        val p = spec.picture ?: return null
+        return if (spec.cutout) ImageCutout.removeBackground(p, spec.cutoutTolerance) else p
+    }
+
+    /**
+     * A finished launcher icon: the visible 72dp window of both layers, cut by [shape]. With [masked] = false (no
+     * background) the glyph is simply drawn on transparency, uncut.
+     */
+    fun composite(bg: Bitmap, fg: Bitmap, shape: IconShape, outPx: Int, masked: Boolean = true): Bitmap {
         val out = Bitmap.createBitmap(outPx, outPx, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        c.drawPath(IconShapes.path(shape, outPx.toFloat()), Paint(Paint.ANTI_ALIAS_FLAG))
         val inset = (bg.width * (1f - VISIBLE) / 2f).toInt()
         val src = Rect(inset, inset, bg.width - inset, bg.height - inset)
         val dst = Rect(0, 0, outPx, outPx)
+        if (!masked) {
+            c.drawBitmap(fg, src, dst, Paint(Paint.FILTER_BITMAP_FLAG))
+            return out
+        }
+        c.drawPath(IconShapes.path(shape, outPx.toFloat()), Paint(Paint.ANTI_ALIAS_FLAG))
         val p = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP) }
         c.drawBitmap(bg, src, dst, p)
         c.drawBitmap(fg, src, dst, p)

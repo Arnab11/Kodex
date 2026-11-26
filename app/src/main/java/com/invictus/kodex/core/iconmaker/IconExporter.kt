@@ -11,14 +11,23 @@ import java.util.zip.ZipOutputStream
  * New resources use kodex-specific names so they never clash with a project's own ic_launcher_foreground.
  * Blocking: call off the main thread.
  */
+/** Image format of the exported bitmaps (the Play Store icon is always PNG). */
+enum class ImageFormat(val ext: String) { Png("png"), Webp("webp") }
+
 object IconExporter {
     private val DENSITIES = listOf("mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192)
     private const val FG = "ic_launcher_kodex_fg"
     private const val BG = "ic_launcher_kodex_bg"
     private const val MONO = "ic_launcher_kodex_mono"
 
+    private fun compress(bmp: Bitmap, f: File, format: ImageFormat) {
+        f.parentFile?.mkdirs()
+        val cf = if (format == ImageFormat.Webp) Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.PNG
+        f.outputStream().use { bmp.compress(cf, 100, it) }
+    }
+
     /** Returns the written files, relative to [displayRoot]. [main] is a module's `src/main` directory. */
-    fun write(main: File, spec: IconSpec, displayRoot: File = main): List<String> {
+    fun write(main: File, spec: IconSpec, displayRoot: File = main, format: ImageFormat = ImageFormat.Png): List<String> {
         val res = File(main, "res")
         val manifest = File(main, "AndroidManifest.xml").takeIf { it.isFile }?.readText().orEmpty()
         val name = Regex("""android:icon="@mipmap/([A-Za-z0-9_]+)"""").find(manifest)?.groupValues?.get(1) ?: "ic_launcher"
@@ -26,9 +35,12 @@ object IconExporter {
 
         val written = ArrayList<String>()
         fun rel(f: File) = f.relativeTo(displayRoot).path.replace(File.separatorChar, '/')
-        fun png(f: File, bmp: Bitmap) {
-            f.parentFile?.mkdirs()
-            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        /** Writes dir/name.<ext>, removing a same-named file of the other format so resources never clash. */
+        fun image(dir: File, imageName: String, bmp: Bitmap, fmt: ImageFormat = format) {
+            File(dir, "$imageName.png").delete()
+            File(dir, "$imageName.webp").delete()
+            val f = File(dir, "$imageName.${fmt.ext}")
+            compress(bmp, f, fmt)
             written += rel(f)
         }
         fun text(f: File, body: String) {
@@ -37,38 +49,45 @@ object IconExporter {
             written += rel(f)
         }
 
+        val masked = spec.bgKind != BgKind.None
         val bg = IconRenderer.background(spec)
         val fg = IconRenderer.foreground(spec)
         val mono = IconRenderer.foreground(spec, mono = true)
         try {
-            png(File(res, "drawable-nodpi/$FG.png"), fg)
-            png(File(res, "drawable-nodpi/$MONO.png"), mono)
+            image(File(res, "drawable-nodpi"), FG, fg)
+            image(File(res, "drawable-nodpi"), MONO, mono)
 
-            val bgRef: String
             val header = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            if (spec.bgKind == BgKind.Solid) {
-                File(res, "drawable/$BG.xml").delete()
-                text(File(res, "values/$BG.xml"), header + "<resources>\n    <color name=\"$BG\">${hex(spec.bg1)}</color>\n</resources>\n")
-                bgRef = "@color/$BG"
-            } else {
-                File(res, "values/$BG.xml").delete()
-                text(
-                    File(res, "drawable/$BG.xml"),
-                    header + "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\" android:shape=\"rectangle\">\n" +
-                        "    <gradient android:type=\"linear\" android:angle=\"${spec.bgAngle}\" " +
-                        "android:startColor=\"${hex(spec.bg1)}\" android:endColor=\"${hex(spec.bg2)}\" />\n</shape>\n",
-                )
-                bgRef = "@drawable/$BG"
+            val bgRef = when (spec.bgKind) {
+                BgKind.None -> {
+                    File(res, "drawable/$BG.xml").delete()
+                    File(res, "values/$BG.xml").delete()
+                    "@android:color/transparent"
+                }
+                BgKind.Solid -> {
+                    File(res, "drawable/$BG.xml").delete()
+                    text(File(res, "values/$BG.xml"), header + "<resources>\n    <color name=\"$BG\">${hex(spec.bg1)}</color>\n</resources>\n")
+                    "@color/$BG"
+                }
+                BgKind.Gradient -> {
+                    File(res, "values/$BG.xml").delete()
+                    text(
+                        File(res, "drawable/$BG.xml"),
+                        header + "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\" android:shape=\"rectangle\">\n" +
+                            "    <gradient android:type=\"linear\" android:angle=\"${spec.bgAngle}\" " +
+                            "android:startColor=\"${hex(spec.bg1)}\" android:endColor=\"${hex(spec.bg2)}\" />\n</shape>\n",
+                    )
+                    "@drawable/$BG"
+                }
             }
 
             for ((dpi, px) in DENSITIES) {
                 val dir = File(res, "mipmap-$dpi")
-                for (n in listOf(name, roundName)) File(dir, "$n.webp").delete()
-                val square = IconRenderer.composite(bg, fg, spec.legacyShape, px)
-                png(File(dir, "$name.png"), square)
+                val square = IconRenderer.composite(bg, fg, spec.legacyShape, px, masked)
+                image(dir, name, square)
                 square.recycle()
-                val round = IconRenderer.composite(bg, fg, IconShape.Circle, px)
-                png(File(dir, "$roundName.png"), round)
+                val round = IconRenderer.composite(bg, fg, IconShape.Circle, px, masked)
+                image(dir, roundName, round)
                 round.recycle()
             }
 
@@ -82,8 +101,12 @@ object IconExporter {
             if (adaptiveDirs.isEmpty()) adaptiveDirs += File(res, "mipmap-anydpi-v26")
             for (d in adaptiveDirs) for (n in listOf(name, roundName)) text(File(d, "$n.xml"), xml)
 
-            val store = IconRenderer.composite(bg, fg, IconShape.Square, 512)
-            png(File(main, "ic_launcher-playstore.png"), store)
+            // The Play Store listing icon is always a PNG.
+            val store = IconRenderer.composite(bg, fg, IconShape.Square, 512, masked)
+            File(main, "ic_launcher-playstore.png").let { f ->
+                compress(store, f, ImageFormat.Png)
+                written += rel(f)
+            }
             store.recycle()
         } finally {
             bg.recycle(); fg.recycle(); mono.recycle()
@@ -103,18 +126,19 @@ object IconExporter {
         }
     }
 
-    /** Notification small icons: res/drawable-<density>/<name>.png at 24/36/48/72/96px. */
-    fun writeNotification(main: File, spec: IconSpec, notif: NotifSpec, displayRoot: File = main): List<String> {
+    /** Notification small icons: res/drawable-<density>/<name>.<png|webp> at 24/36/48/72/96px. */
+    fun writeNotification(main: File, spec: IconSpec, notif: NotifSpec, displayRoot: File = main, format: ImageFormat = ImageFormat.Png): List<String> {
         val name = resourceName(notif.name)
         val written = ArrayList<String>()
         for ((dpi, px) in NOTIF_DENSITIES) {
             val dir = File(main, "res/drawable-$dpi")
             dir.mkdirs()
             File(dir, "$name.xml").delete()
+            File(dir, "$name.png").delete()
             File(dir, "$name.webp").delete()
-            val f = File(dir, "$name.png")
+            val f = File(dir, "$name.${format.ext}")
             val bmp = IconRenderer.notification(spec, notif, px)
-            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            compress(bmp, f, format)
             bmp.recycle()
             written += f.relativeTo(displayRoot).path.replace(File.separatorChar, '/')
         }

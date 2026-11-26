@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 
 enum class GlyphKind { Symbol, Text, Picture }
 
-enum class BgKind { Solid, Gradient }
+enum class BgKind { None, Solid, Gradient }
 
 /** Letter styles for the Text glyph. */
 enum class TextFont { Bold, Light, Serif, Mono, Script }
@@ -20,6 +20,10 @@ data class IconSpec(
     val font: TextFont = TextFont.Bold,
     val picture: Bitmap? = null,
     val tintPicture: Boolean = false,
+    /** Erase the image's plain background (flood-filled from its edges). */
+    val cutout: Boolean = false,
+    /** 0..100: how far a colour may differ from the background colour and still be erased. */
+    val cutoutTolerance: Int = 30,
     val fgColor: Int = 0xFFFFFFFF.toInt(),
     val sizePct: Int = 80,
     val offsetXPct: Int = 0,

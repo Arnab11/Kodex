@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,15 +44,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -141,17 +145,117 @@ enum class PreviewMode(val label: Int) {
 @Composable
 fun previewModeLabel(mode: PreviewMode) = stringResource(mode.label)
 
-/** Height of the preview card's picture; the mode pills float over its bottom 46dp. */
-val PREVIEW_HEIGHT = 196.dp
-private val PILL_SPACE = 46.dp
+/** Room kept free at the bottom of a preview for the floating mode pills. */
+private val PILL_SPACE = 60.dp
 
+// ---- Wallpapers -----------------------------------------------------------------------------------------------
+
+private class Blob(val x: Float, val y: Float, val r: Float, val color: Color)
+
+private class WallpaperPreset(val base: List<Color>, val blobs: List<Blob>, val light: Boolean = false)
+
+/** Soft mesh-gradient wallpapers, drawn live (no image assets). */
+private val WALLPAPERS = listOf(
+    // Aurora
+    WallpaperPreset(
+        listOf(Color(0xFF0B1B3A), Color(0xFF1B2A63)),
+        listOf(Blob(0.15f, 0.15f, 0.75f, Color(0xFF14B8A6)), Blob(0.9f, 0.3f, 0.65f, Color(0xFF7C3AED)), Blob(0.5f, 1.0f, 0.7f, Color(0xFF22C55E))),
+    ),
+    // Dusk
+    WallpaperPreset(
+        listOf(Color(0xFF1F1147), Color(0xFF4B2E83)),
+        listOf(Blob(0.9f, 1.0f, 0.8f, Color(0xFFF97316)), Blob(0.1f, 0.7f, 0.7f, Color(0xFFEC4899)), Blob(0.5f, 0.0f, 0.6f, Color(0xFF6366F1))),
+    ),
+    // Ocean
+    WallpaperPreset(
+        listOf(Color(0xFF03234A), Color(0xFF0E7490)),
+        listOf(Blob(0.2f, 0.9f, 0.8f, Color(0xFF06B6D4)), Blob(0.9f, 0.1f, 0.7f, Color(0xFF2563EB))),
+    ),
+    // Forest
+    WallpaperPreset(
+        listOf(Color(0xFF07261A), Color(0xFF14532D)),
+        listOf(Blob(0.8f, 0.2f, 0.6f, Color(0xFF84CC16)), Blob(0.1f, 0.9f, 0.7f, Color(0xFF0D9488))),
+    ),
+    // Cloud (light)
+    WallpaperPreset(
+        listOf(Color(0xFFEAF2FF), Color(0xFFCFE0FF)),
+        listOf(Blob(0.2f, 0.2f, 0.7f, Color(0xFF93C5FD)), Blob(0.9f, 0.9f, 0.7f, Color(0xFFFBCFE8))),
+        light = true,
+    ),
+    // Midnight
+    WallpaperPreset(
+        listOf(Color(0xFF050510), Color(0xFF14142B)),
+        listOf(Blob(0.8f, 0.15f, 0.6f, Color(0xFF4C1D95)), Blob(0.1f, 0.9f, 0.6f, Color(0xFF1E3A8A))),
+    ),
+)
+
+val WALLPAPER_COUNT: Int get() = WALLPAPERS.size
+
+/** Light wallpapers need dark labels. */
+fun wallpaperIsLight(preset: Int, image: ImageBitmap?): Boolean =
+    image == null && WALLPAPERS[preset.coerceIn(0, WALLPAPERS.lastIndex)].light
+
+private fun DrawScope.drawPreset(p: WallpaperPreset) {
+    drawRect(Brush.linearGradient(p.base, start = Offset.Zero, end = Offset(size.width, size.height)))
+    val m = maxOf(size.width, size.height)
+    for (b in p.blobs) {
+        val c = Offset(b.x * size.width, b.y * size.height)
+        drawCircle(
+            Brush.radialGradient(listOf(b.color.copy(alpha = 0.85f), Color.Transparent), center = c, radius = b.r * m),
+            radius = b.r * m,
+            center = c,
+        )
+    }
+}
+
+/** A preset wallpaper, or [image] (centre-cropped to fill) when one is chosen. */
 @Composable
-fun IconPreview(mode: PreviewMode, layers: Layers?, shape: IconShape, onShape: (IconShape) -> Unit) {
-    Box(Modifier.fillMaxWidth().height(PREVIEW_HEIGHT), contentAlignment = Alignment.Center) {
+fun WallpaperCanvas(preset: Int, image: ImageBitmap?, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        if (image == null) {
+            drawPreset(WALLPAPERS[preset.coerceIn(0, WALLPAPERS.lastIndex)])
+            return@Canvas
+        }
+        val aspect = size.width / size.height
+        val iw = image.width
+        val ih = image.height
+        val srcW: Int
+        val srcH: Int
+        if (iw.toFloat() / ih > aspect) {
+            srcH = ih
+            srcW = (ih * aspect).roundToInt().coerceIn(1, iw)
+        } else {
+            srcW = iw
+            srcH = (iw / aspect).roundToInt().coerceIn(1, ih)
+        }
+        drawImage(
+            image,
+            srcOffset = IntOffset((iw - srcW) / 2, (ih - srcH) / 2),
+            srcSize = IntSize(srcW, srcH),
+            dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+        )
+    }
+}
+
+// ---- Preview picture ------------------------------------------------------------------------------------------
+
+/** Fills its parent; content scales with the height it is given (a taller card gets bigger icons and a clock). */
+@Composable
+fun IconPreview(
+    mode: PreviewMode,
+    layers: Layers?,
+    shape: IconShape,
+    onShape: (IconShape) -> Unit,
+    light: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val label = if (light) Color(0xFF1B1B1F) else Color.White
+    BoxWithConstraints(modifier) {
+        val h = maxHeight
         when (mode) {
-            PreviewMode.Home -> HomePreview(layers, shape)
-            PreviewMode.Icon -> IconModePreview(layers, shape, onShape)
-            PreviewMode.Themed -> ThemedPreview(layers, shape)
+            PreviewMode.Home -> HomePreview(layers, shape, h, label)
+            PreviewMode.Icon -> IconModePreview(layers, shape, onShape, h, label)
+            PreviewMode.Themed -> ThemedPreview(layers, shape, h, label)
         }
     }
 }
@@ -239,15 +343,19 @@ private fun AppTile(app: PreviewApp, modifier: Modifier = Modifier) {
     }
 }
 
-/** Your icon among real-looking apps on a wallpaper, with a status bar: the way it will actually be judged. */
+/** Your icon among real-looking apps on the wallpaper, with a status bar (and a clock when there is room). */
 @Composable
-private fun HomePreview(layers: Layers?, shape: IconShape) {
+private fun HomePreview(layers: Layers?, shape: IconShape, h: Dp, label: Color) {
     val mask = remember(shape) { MaskShape(shape) }
+    val tall = h > 360.dp
+    val tile = if (tall) 58.dp else 46.dp
+    val time = remember { java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("H:mm")) }
+    val date = remember { java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM")) }
     @Composable
-    fun slot(label: String, content: @Composable () -> Unit) {
-        Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Box(Modifier.size(44.dp).clip(mask)) { content() }
-            Text(label, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    fun slot(name: String, content: @Composable () -> Unit) {
+        Column(Modifier.width(tile + 14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(Modifier.size(tile).clip(mask)) { content() }
+            Text(name, color = label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }
     val cells: List<@Composable () -> Unit> = buildList {
@@ -256,32 +364,32 @@ private fun HomePreview(layers: Layers?, shape: IconShape) {
             add { slot(app.label) { AppTile(app, Modifier.fillMaxSize()) } }
         }
     }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.linearGradient(listOf(Color(0xFF0F2A4A), Color(0xFF3B2A78), Color(0xFF0E6F6B)))),
-    ) {
-        // a soft vignette so the floating pills read well over the wallpaper
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(Color.Transparent, Color(0x66000000))),
-            ),
-        )
+    Box(Modifier.fillMaxSize()) {
+        // gentle vignette: keeps labels and the pills readable on any wallpaper
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x22000000), Color.Transparent, Color(0x55000000)))))
         Column(
-            Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = PILL_SPACE),
+            Modifier.fillMaxSize().padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = PILL_SPACE),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("9:41", color = Color.White, fontSize = 10.sp)
+                Text(time, color = label, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
-                    Box(Modifier.width(16.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.9f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(label.copy(alpha = 0.85f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(label.copy(alpha = 0.85f)))
+                    Box(Modifier.width(16.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(label.copy(alpha = 0.9f)))
                 }
             }
-            for (row in cells.chunked(4)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    for (cell in row) cell()
+            if (tall) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(time, color = label, fontSize = 64.sp, fontWeight = FontWeight.Light)
+                    Text(date, color = label.copy(alpha = 0.85f), fontSize = 14.sp)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(if (tall) 18.dp else 8.dp)) {
+                for (row in cells.chunked(4)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        for (cell in row) cell()
+                    }
                 }
             }
         }
@@ -291,10 +399,12 @@ private fun HomePreview(layers: Layers?, shape: IconShape) {
 // ---- Icon ----------------------------------------------------------------------------------------------------
 
 @Composable
-private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (IconShape) -> Unit) {
+private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (IconShape) -> Unit, h: Dp, label: Color) {
     var drag by remember { mutableStateOf(Offset.Zero) }
     var safe by remember { mutableStateOf(false) }
     val parallax by animateOffsetAsState(drag, label = "parallax")
+    val big = (h * 0.40f).coerceIn(84.dp, 168.dp)
+    val thumb = if (h > 360.dp) 44.dp else 34.dp
     Column(
         Modifier.fillMaxSize().padding(bottom = PILL_SPACE),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -307,7 +417,7 @@ private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (Icon
                 parallax = parallax,
                 safeZone = safe,
                 modifier = Modifier
-                    .size(88.dp)
+                    .size(big)
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragEnd = { drag = Offset.Zero },
@@ -323,12 +433,12 @@ private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (Icon
                 Text(
                     stringResource(R.string.im_drag_hint),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = label.copy(alpha = 0.85f),
                     modifier = Modifier.width(120.dp),
                 )
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (shape in IconShape.entries) {
                 Box(
@@ -341,7 +451,7 @@ private fun IconModePreview(layers: Layers?, selected: IconShape, onShape: (Icon
                         .clickable { onShape(shape) }
                         .padding(4.dp),
                 ) {
-                    LayeredIcon(layers, shape, Modifier.size(34.dp))
+                    LayeredIcon(layers, shape, Modifier.size(thumb))
                 }
             }
         }
@@ -359,8 +469,9 @@ fun shapeLabel(shape: IconShape): Int = when (shape) {
 // ---- Themed --------------------------------------------------------------------------------------------------
 
 @Composable
-private fun ThemedPreview(layers: Layers?, shape: IconShape) {
+private fun ThemedPreview(layers: Layers?, shape: IconShape, h: Dp, label: Color) {
     val cs = MaterialTheme.colorScheme
+    val tile = (h * 0.28f).coerceIn(62.dp, 104.dp)
     val tiles = listOf(
         Triple(R.string.im_light, Color(0xFFD6E3FF), Color(0xFF1B3B6F)),
         Triple(R.string.im_dark, Color(0xFF284777), Color(0xFFD6E3FF)),
@@ -371,10 +482,10 @@ private fun ThemedPreview(layers: Layers?, shape: IconShape) {
         horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for ((label, bg, fg) in tiles) {
+        for ((name, bg, fg) in tiles) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ThemedIcon(layers, shape, bg, fg, Modifier.size(68.dp))
-                Text(stringResource(label), style = MaterialTheme.typography.labelMedium)
+                ThemedIcon(layers, shape, bg, fg, Modifier.size(tile))
+                Text(stringResource(name), style = MaterialTheme.typography.labelMedium, color = label)
             }
         }
     }
@@ -413,7 +524,7 @@ fun NotificationPreview(glyph: ImageBitmap?, accent: Color) {
             Box(Modifier.width(16.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(fg.copy(alpha = 0.8f)))
         }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             bar(Color(0xFF111418), Color.White, Modifier.weight(1f))
             bar(Color(0xFFF2F4F8), Color(0xFF1B1B1F), Modifier.weight(1f))

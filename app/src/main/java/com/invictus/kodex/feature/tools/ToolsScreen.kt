@@ -3,6 +3,11 @@ package com.invictus.kodex.feature.tools
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,11 +78,13 @@ fun ToolsScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 ToolCard(
                     icon = XIcons.Key,
+                    accent = ToolAccent.Primary,
                     title = R.string.tools_keystore_title,
                     desc = R.string.tools_keystore_desc,
                     isSelected = inTabletMode && selectedTool == ToolSelection.Keystore,
@@ -87,6 +94,7 @@ fun ToolsScreen(
                 )
                 ToolCard(
                     icon = XIcons.Scissors,
+                    accent = ToolAccent.Secondary,
                     title = R.string.tools_split_title,
                     desc = R.string.tools_split_desc,
                     isSelected = inTabletMode && selectedTool == ToolSelection.Splitter,
@@ -96,6 +104,7 @@ fun ToolsScreen(
                 )
                 ToolCard(
                     icon = XIcons.Image,
+                    accent = ToolAccent.Tertiary,
                     title = R.string.tools_tracer_title,
                     desc = R.string.tools_tracer_desc,
                     isSelected = inTabletMode && selectedTool == ToolSelection.Tracer,
@@ -105,6 +114,7 @@ fun ToolsScreen(
                 )
                 ToolCard(
                     icon = XIcons.Palette,
+                    accent = ToolAccent.Primary,
                     title = R.string.tools_iconmaker_title,
                     desc = R.string.tools_iconmaker_desc,
                     isSelected = inTabletMode && selectedTool == ToolSelection.IconMaker,
@@ -139,48 +149,70 @@ fun ToolsScreen(
     }
 }
 
+private enum class ToolAccent { Primary, Secondary, Tertiary }
+
 @Composable
 private fun ToolCard(
     icon: ImageVector,
     title: Int,
     desc: Int,
+    accent: ToolAccent,
     isSelected: Boolean = false,
     onClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val containerColor = if (isSelected) cs.secondaryContainer else cs.surfaceContainerLow
-    val titleColor = if (isSelected) cs.onSecondaryContainer else cs.onSurface
-    val descColor = if (isSelected) cs.onSecondaryContainer.copy(alpha = 0.78f) else cs.onSurfaceVariant
-    val chevronTint = if (isSelected) cs.onSecondaryContainer.copy(alpha = 0.7f) else cs.onSurfaceVariant
+    val (tileBg, tileFg) = when (accent) {
+        ToolAccent.Primary -> cs.primaryContainer to cs.onPrimaryContainer
+        ToolAccent.Secondary -> cs.secondaryContainer to cs.onSecondaryContainer
+        ToolAccent.Tertiary -> cs.tertiaryContainer to cs.onTertiaryContainer
+    }
+    val shape = RoundedCornerShape(28.dp)
+    val containerColor = if (isSelected) cs.secondaryContainer else cs.surfaceContainer
+    val border = if (isSelected) cs.primary else cs.outlineVariant.copy(alpha = 0.6f)
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(shape)
             .background(containerColor)
+            .border(if (isSelected) 2.dp else 1.dp, border, shape)
             .clickable(onClick = onClick)
-            .padding(18.dp),
+            .padding(horizontal = 16.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(if (isSelected) cs.primary else cs.primaryContainer),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(tileBg),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (isSelected) cs.onPrimary else cs.onPrimaryContainer,
-                modifier = Modifier.size(26.dp),
+            Icon(icon, contentDescription = null, tint = tileFg, modifier = Modifier.size(28.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                stringResource(title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = cs.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                stringResource(desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(title), style = MaterialTheme.typography.titleMedium, color = titleColor)
-            Text(stringResource(desc), style = MaterialTheme.typography.bodyMedium, color = descColor)
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(if (isSelected) cs.primary else cs.surfaceContainerHighest),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                XIcons.ChevronRight,
+                contentDescription = null,
+                tint = if (isSelected) cs.onPrimary else cs.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
         }
-        Icon(XIcons.ChevronRight, contentDescription = null, tint = chevronTint)
     }
 }

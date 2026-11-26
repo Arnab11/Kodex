@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -348,19 +349,20 @@ private fun AppTile(app: PreviewApp, modifier: Modifier = Modifier) {
 private fun HomePreview(layers: Layers?, shape: IconShape, h: Dp, label: Color) {
     val mask = remember(shape) { MaskShape(shape) }
     val tall = h > 360.dp
-    val tile = if (tall) 58.dp else 46.dp
+    val tile = if (tall) 50.dp else 42.dp
     val time = remember { java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("H:mm")) }
     val date = remember { java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM")) }
     @Composable
-    fun slot(name: String, content: @Composable () -> Unit) {
-        Column(Modifier.width(tile + 14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    fun RowScope.slot(name: String, content: @Composable () -> Unit) {
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Box(Modifier.size(tile).clip(mask)) { content() }
             Text(name, color = label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }
-    val cells: List<@Composable () -> Unit> = buildList {
+    // five icons per row, your icon dead centre of the first row
+    val cells: List<@Composable RowScope.() -> Unit> = buildList {
         NEIGHBOURS.forEachIndexed { i, app ->
-            if (i == 1) add { slot(stringResource(R.string.im_app_label)) { LayeredIcon(layers, shape, Modifier.fillMaxSize()) } }
+            if (i == 2) add { slot(stringResource(R.string.im_app_label)) { LayeredIcon(layers, shape, Modifier.fillMaxSize()) } }
             add { slot(app.label) { AppTile(app, Modifier.fillMaxSize()) } }
         }
     }
@@ -386,9 +388,10 @@ private fun HomePreview(layers: Layers?, shape: IconShape, h: Dp, label: Color) 
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(if (tall) 18.dp else 8.dp)) {
-                for (row in cells.chunked(4)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                for (row in cells.chunked(5)) {
+                    Row(Modifier.fillMaxWidth()) {
                         for (cell in row) cell()
+                        repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }

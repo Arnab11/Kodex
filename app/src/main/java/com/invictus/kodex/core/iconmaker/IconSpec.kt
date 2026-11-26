@@ -24,18 +24,18 @@ data class IconSpec(
     val cutout: Boolean = false,
     /** 0..100: how far a colour may differ from the background colour and still be erased. */
     val cutoutTolerance: Int = 30,
-    val fgColor: Int = 0xFFFFFFFF.toInt(),
+    val fgColor: Int = 0xFF1B1B1F.toInt(),
     val sizePct: Int = 80,
     val offsetXPct: Int = 0,
     val offsetYPct: Int = 0,
     val shadow: Boolean = false,
-    val bgKind: BgKind = BgKind.Gradient,
-    val bg1: Int = 0xFF7C4DFF.toInt(),
+    val bgKind: BgKind = BgKind.Solid,
+    val bg1: Int = 0xFFFFFFFF.toInt(),
     val bg2: Int = 0xFF3D2BC4.toInt(),
     /** Android gradient angle, multiples of 45: 0 = left to right, 90 = bottom to top. */
     val bgAngle: Int = 45,
     /** Mask for the legacy PNGs; also the mask the previews use. */
-    val legacyShape: IconShape = IconShape.Rounded,
+    val legacyShape: IconShape = IconShape.Circle,
 )
 
 /** Status-bar / notification small icon: the same glyph, white on transparent, exported per density. */

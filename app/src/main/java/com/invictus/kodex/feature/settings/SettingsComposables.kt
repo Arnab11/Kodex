@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Card shell for a group of settings rows, styled after xmd's SettingsSectionCard
- * (mpvRx-derived): 20dp rounded corners, low-emphasis surface, AMOLED hairline border.
+ * (mpvRx-derived): 20dp rounded corners, low-emphasis surface, hairline border on every theme (neutral grey on AMOLED).
  */
 @Composable
 fun SettingsSectionCard(
@@ -46,8 +46,14 @@ fun SettingsSectionCard(
     val isAmoled = MaterialTheme.colorScheme.background == Color.Black
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = if (isAmoled) BorderStroke(1.dp, Color(0xFF1F1F1F)) else null,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        // the group stays visible on every theme, not only on pure black
+        border = BorderStroke(
+            1.dp,
+            if (isAmoled) Color(0xFF1F1F1F) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+        ),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {

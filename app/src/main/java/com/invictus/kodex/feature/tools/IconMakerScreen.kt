@@ -161,8 +161,10 @@ fun IconMakerScreen(
         if (uri != null) viewModel.setWallpaperUri(uri)
     }
     var preview by rememberSaveable { mutableStateOf(PreviewMode.Home) }
-    // The editor starts collapsed: the preview gets the whole screen until a tool is tapped.
-    var openTab by rememberSaveable(state.mode) { mutableStateOf<EditorTab?>(null) }
+    // The editor opens on the Icon tab (Image source, with the "Choose image" button); the tools row collapses it.
+    var openTab by rememberSaveable(state.mode) { mutableStateOf<EditorTab?>(EditorTab.Icon) }
+    // Kept here so switching tools doesn't reset the Text / Image / Icons choice.
+    var iconSource by rememberSaveable { mutableStateOf(Source.Image) }
     var shownTab by remember(state.mode) { mutableStateOf(EditorTab.Icon) }
     LaunchedEffect(openTab) { openTab?.let { shownTab = it } }
     val tabs = if (isApp) APP_TABS else NOTIF_TABS
@@ -206,7 +208,7 @@ fun IconMakerScreen(
                     busy = state.busy,
                     onSave = { viewModel.openExport(ExportKind.Zip) },
                     onApply = { viewModel.openExport(ExportKind.Apply) },
-                ) { tab -> TabPanel(tab, state, viewModel, isApp) { imagePicker.launch("image/*") } }
+                ) { tab -> TabPanel(tab, state, viewModel, isApp, iconSource, { iconSource = it }) { imagePicker.launch("image/*") } }
             }
         }
     }
@@ -387,11 +389,13 @@ private fun TabPanel(
     state: IconMakerViewModel.UiState,
     vm: IconMakerViewModel,
     isApp: Boolean,
+    source: Source,
+    onSource: (Source) -> Unit,
     pickImage: () -> Unit,
 ) {
     val spec = state.spec
     when (tab) {
-        EditorTab.Icon -> IconTab(state, vm, pickImage)
+        EditorTab.Icon -> IconTab(state, vm, source, onSource, pickImage)
         EditorTab.Colors -> Panel {
             SectionTitle(R.string.im_quick_styles)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -432,7 +436,7 @@ private fun TabPanel(
         }
         EditorTab.Size -> Panel {
             if (isApp) {
-                IntSlider(R.string.im_size, spec.sizePct, 30..130) { vm.edit { copy(sizePct = it) } }
+                IntSlider(R.string.im_size, spec.sizePct, 30..200) { vm.edit { copy(sizePct = it) } }
                 IntSlider(R.string.im_offset_x, spec.offsetXPct, -30..30) { vm.edit { copy(offsetXPct = it) } }
                 IntSlider(R.string.im_offset_y, spec.offsetYPct, -30..30) { vm.edit { copy(offsetYPct = it) } }
                 SwitchRow(R.string.im_shadow, spec.shadow) { vm.edit { copy(shadow = it) } }
@@ -477,27 +481,24 @@ private fun Panel(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-private enum class Source { Text, Image, Icons }
+internal enum class Source { Text, Image, Icons }
 
 @Composable
-private fun IconTab(state: IconMakerViewModel.UiState, vm: IconMakerViewModel, pickImage: () -> Unit) {
+private fun IconTab(
+    state: IconMakerViewModel.UiState,
+    vm: IconMakerViewModel,
+    source: Source,
+    onSource: (Source) -> Unit,
+    pickImage: () -> Unit,
+) {
     val spec = state.spec
-    var source by rememberSaveable {
-        mutableStateOf(
-            when (spec.kind) {
-                GlyphKind.Text -> Source.Text
-                GlyphKind.Picture -> Source.Image
-                GlyphKind.Symbol -> Source.Icons
-            },
-        )
-    }
     var query by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
         PillTabs(
             items = listOf(Source.Text to R.string.im_src_text, Source.Image to R.string.im_src_image, Source.Icons to R.string.im_src_icons),
             selected = source,
             onSelect = { s ->
-                source = s
+                onSource(s)
                 query = ""
                 when (s) {
                     Source.Text -> vm.edit { copy(kind = GlyphKind.Text) }
@@ -731,49 +732,37 @@ private fun ExpressiveSlider(
         currentOnChange(range.start + f * span)
     }
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(cs.surfaceContainerHighest)
-            .onSizeChanged { widthPx = it.width }
-            .pointerInput(range.start, span, steps) { detectTapGestures { update(it.x) } }
-            .pointerInput(range.start, span, steps) {
-                detectHorizontalDragGestures(onDragStart = { update(it.x) }) { change, _ ->
-                    change.consume()
-                    update(change.position.x)
-                }
-            },
-    ) {
-        Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(cs.primary))
-        SliderLabels(label, valueText, cs.onSurface, Modifier.matchParentSize())
-        // the same labels again in the "on primary" colour, visible only over the filled part
-        Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).clipToBounds()) {
-            SliderLabels(
-                label,
-                valueText,
-                cs.onPrimary,
-                Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(with(density) { widthPx.toDp() }).fillMaxHeight(),
-            )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = cs.onSurface, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(valueText, color = cs.primary, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        val handleEdge = with(density) { 14.dp.roundToPx() }
         Box(
             Modifier
-                .align(Alignment.CenterStart)
-                .offset { IntOffset((widthPx * fraction).roundToInt() - handleEdge, 0) }
-                .size(width = 4.dp, height = 30.dp)
-                .clip(CircleShape)
-                .background(cs.onPrimary),
-        )
-    }
-}
-
-@Composable
-private fun SliderLabels(label: String, valueText: String, color: Color, modifier: Modifier) {
-    Row(modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.weight(1f))
-        Text(valueText, color = color, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                .fillMaxWidth()
+                .height(36.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(cs.surfaceContainerHighest)
+                .onSizeChanged { widthPx = it.width }
+                .pointerInput(range.start, span, steps) { detectTapGestures { update(it.x) } }
+                .pointerInput(range.start, span, steps) {
+                    detectHorizontalDragGestures(onDragStart = { update(it.x) }) { change, _ ->
+                        change.consume()
+                        update(change.position.x)
+                    }
+                },
+        ) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(cs.primary))
+            val handleEdge = with(density) { 10.dp.roundToPx() }
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .offset { IntOffset(((widthPx * fraction).roundToInt() - handleEdge).coerceAtLeast(with(density) { 4.dp.roundToPx() }), 0) }
+                    .size(width = 4.dp, height = 22.dp)
+                    .clip(CircleShape)
+                    .background(cs.onPrimary),
+            )
+        }
     }
 }
 

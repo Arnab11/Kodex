@@ -51,6 +51,7 @@ class SshConnectionManager(
     private val reconnectMutex = Mutex()
 
     private var activeSession: Session? = null
+    private var activeJumpSessions: List<Session> = emptyList()
     private var activeSftp: ChannelSftp? = null
     private var activeHost: SshHostConfig? = null
     private var activeMirrorRoot: File? = null
@@ -103,10 +104,11 @@ class SshConnectionManager(
     ): Result<SshConnectionState.Connected> = withContext(io) {
         closeActiveChannelsOnly()
         _connectionState.value = SshConnectionState.Connecting(host, "Connecting to ${host.endpoint}...")
-        var session: Session? = null
+        var bundle: SessionBundle? = null
         var sftp: ChannelSftp? = null
         try {
-            session = openSession(host, socketTimeoutMs = SOCKET_TIMEOUT_MS)
+            bundle = openSessionBundle(host, socketTimeoutMs = SOCKET_TIMEOUT_MS)
+            val session = bundle.session
             pendingSession = session
             _connectionState.value = SshConnectionState.Connecting(host, "Opening SFTP subsystem...")
             sftp = (session.openChannel("sftp") as ChannelSftp).apply {
@@ -119,6 +121,7 @@ class SshConnectionManager(
 
             synchronized(sessionLock) {
                 activeSession = session
+                activeJumpSessions = bundle.jumpSessions
                 activeSftp = sftp
                 activeHost = host
                 activeMirrorRoot = mirrorRoot
@@ -136,14 +139,14 @@ class SshConnectionManager(
             Result.success(connected)
         } catch (e: kotlinx.coroutines.CancellationException) {
             runCatching { sftp?.disconnect() }
-            runCatching { session?.disconnect() }
+            bundle?.disconnectAll()
             pendingSession = null
             pendingSocket = null
             _connectionState.value = SshConnectionState.Disconnected
             throw e
         } catch (e: Exception) {
             runCatching { sftp?.disconnect() }
-            runCatching { session?.disconnect() }
+            bundle?.disconnectAll()
             pendingSession = null
             pendingSocket = null
             Log.w(TAG, "SSH connect failed", e)
@@ -194,18 +197,18 @@ class SshConnectionManager(
 
     /** Tests connectivity + SFTP without disturbing the active workspace connection if possible. */
     suspend fun testConnection(host: SshHostConfig): Result<String> = withContext(io) {
-        var session: Session? = null
+        var bundle: SessionBundle? = null
         var sftp: ChannelSftp? = null
         try {
-            session = openSession(host)
-            sftp = (session.openChannel("sftp") as ChannelSftp).apply { connect(CHANNEL_TIMEOUT_MS) }
+            bundle = openSessionBundle(host, socketTimeoutMs = SOCKET_TIMEOUT_MS)
+            sftp = (bundle.session.openChannel("sftp") as ChannelSftp).apply { connect(CHANNEL_TIMEOUT_MS) }
             val home = sftp.pwd()
             Result.success(home)
         } catch (e: Exception) {
             Result.failure(Exception(friendlyError(e), e))
         } finally {
             runCatching { sftp?.disconnect() }
-            runCatching { session?.disconnect() }
+            bundle?.disconnectAll()
         }
     }
 
@@ -240,8 +243,10 @@ class SshConnectionManager(
         synchronized(sessionLock) {
             runCatching { activeSftp?.disconnect() }
             runCatching { activeSession?.disconnect() }
+            activeJumpSessions.asReversed().forEach { runCatching { it.disconnect() } }
             activeSftp = null
             activeSession = null
+            activeJumpSessions = emptyList()
             activeHost = null
             activeMirrorRoot = null
         }
@@ -393,8 +398,8 @@ class SshConnectionManager(
             val s = activeSession
             if (s != null && s.isConnected && activeHost?.id == host.id) s else null
         }
-        val session = reuse ?: openSession(host, socketTimeoutMs = 0)
-        val ownsSession = reuse == null
+        val ownedBundle = if (reuse == null) openSessionBundle(host, socketTimeoutMs = 0) else null
+        val session = reuse ?: ownedBundle!!.session
         val channel = (session.openChannel("shell") as ChannelShell).apply {
             setPty(true)
             setPtyType("xterm-256color")
@@ -420,7 +425,7 @@ class SshConnectionManager(
             override fun exitStatus(): Int = channel.exitStatus
             override fun close() {
                 runCatching { channel.disconnect() }
-                if (ownsSession) runCatching { session.disconnect() }
+                ownedBundle?.disconnectAll()
             }
         }
     }
@@ -429,7 +434,92 @@ class SshConnectionManager(
 
     // region JSch session setup
 
-    private fun openSession(host: SshHostConfig, socketTimeoutMs: Int = SOCKET_TIMEOUT_MS): Session {
+    private class SessionBundle(val session: Session, val jumpSessions: List<Session>) {
+        fun disconnectAll() {
+            runCatching { session.disconnect() }
+            jumpSessions.asReversed().forEach { runCatching { it.disconnect() } }
+        }
+    }
+
+    private fun openSessionBundle(host: SshHostConfig, socketTimeoutMs: Int = SOCKET_TIMEOUT_MS): SessionBundle {
+        val jumpSpecs = host.proxyJump.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val jumpSessions = ArrayList<Session>(jumpSpecs.size)
+        try {
+            var connectHost = host.host.trim()
+            var connectPort = host.port
+            var hostKeyAlias: String? = null
+
+            for (spec in jumpSpecs) {
+                val hopConfig = resolveJumpHost(spec, defaultUser = host.username)
+                val hopSession = openSingleSession(
+                    host = hopConfig,
+                    connectHost = connectHost,
+                    connectPort = connectPort,
+                    hostKeyAlias = hostKeyAlias,
+                    socketTimeoutMs = socketTimeoutMs,
+                )
+                jumpSessions += hopSession
+                // Forward an ephemeral local port through this jump host to the next hop (or final target).
+                val nextTargetHost = if (jumpSessions.size < jumpSpecs.size) {
+                    resolveJumpHost(jumpSpecs[jumpSessions.size], defaultUser = host.username).host.trim()
+                } else {
+                    host.host.trim()
+                }
+                val nextTargetPort = if (jumpSessions.size < jumpSpecs.size) {
+                    resolveJumpHost(jumpSpecs[jumpSessions.size], defaultUser = host.username).port
+                } else {
+                    host.port
+                }
+                connectPort = hopSession.setPortForwardingL(0, nextTargetHost, nextTargetPort)
+                connectHost = "127.0.0.1"
+                hostKeyAlias = nextTargetHost
+            }
+
+            val finalSession = openSingleSession(
+                host = host,
+                connectHost = connectHost,
+                connectPort = connectPort,
+                hostKeyAlias = hostKeyAlias,
+                socketTimeoutMs = socketTimeoutMs,
+            )
+            applyPortForwards(finalSession, host.portForwards)
+            return SessionBundle(finalSession, jumpSessions)
+        } catch (e: Exception) {
+            jumpSessions.asReversed().forEach { runCatching { it.disconnect() } }
+            throw e
+        }
+    }
+
+    private fun resolveJumpHost(spec: String, defaultUser: String): SshHostConfig {
+        val savedMatch = hostStore.hosts.value.firstOrNull {
+            it.label.equals(spec, ignoreCase = true) || it.host.equals(spec, ignoreCase = true)
+        }
+        if (savedMatch != null) return savedMatch
+        val detectedMatch = hostStore.detectedHosts.value.firstOrNull {
+            it.label.equals(spec, ignoreCase = true) || it.id == SshConfigParser.CONFIG_ID_PREFIX + spec
+        }
+        if (detectedMatch != null) return detectedMatch
+        return SshQuickConnectParser.parse(spec, defaultUser = defaultUser.ifBlank { "root" })
+            ?: throw IllegalArgumentException("Invalid ProxyJump host: $spec")
+    }
+
+    private fun applyPortForwards(session: Session, rules: List<SshForwardRule>) {
+        for (rule in rules) {
+            val bind = rule.bindAddress.ifBlank { "127.0.0.1" }
+            when (rule.type) {
+                SshForwardType.LOCAL -> session.setPortForwardingL(bind, rule.listenPort, rule.targetHost, rule.targetPort)
+                SshForwardType.REMOTE -> session.setPortForwardingR(bind, rule.listenPort, rule.targetHost, rule.targetPort)
+            }
+        }
+    }
+
+    private fun openSingleSession(
+        host: SshHostConfig,
+        connectHost: String,
+        connectPort: Int,
+        hostKeyAlias: String?,
+        socketTimeoutMs: Int,
+    ): Session {
         val jsch = JSch()
         hostStore.knownHostsFile.parentFile?.mkdirs()
         if (!hostStore.knownHostsFile.exists()) {
@@ -449,7 +539,10 @@ class SshConnectionManager(
             }
         }
 
-        val session = jsch.getSession(host.username.trim(), host.host.trim(), host.port)
+        val session = jsch.getSession(host.username.trim(), connectHost, connectPort)
+        if (!hostKeyAlias.isNullOrBlank()) {
+            session.setHostKeyAlias(hostKeyAlias)
+        }
         if (host.authType == SshAuthType.PASSWORD && host.password.isNotEmpty()) {
             session.setPassword(host.password)
         }

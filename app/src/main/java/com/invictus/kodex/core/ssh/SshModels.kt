@@ -11,6 +11,25 @@ enum class SshAuthType {
     PRIVATE_KEY,
 }
 
+enum class SshForwardType {
+    LOCAL,
+    REMOTE,
+}
+
+data class SshForwardRule(
+    val type: SshForwardType,
+    val bindAddress: String = "127.0.0.1",
+    val listenPort: Int,
+    val targetHost: String,
+    val targetPort: Int,
+) {
+    fun toDisplayString(): String {
+        val prefix = if (type == SshForwardType.LOCAL) "L" else "R"
+        val bind = if (bindAddress.isBlank() || bindAddress == "127.0.0.1") "" else "$bindAddress:"
+        return "$prefix $bind$listenPort:$targetHost:$targetPort"
+    }
+}
+
 data class SshHostConfig(
     val id: String = UUID.randomUUID().toString(),
     val label: String = "",
@@ -22,6 +41,8 @@ data class SshHostConfig(
     val privateKey: String = "",
     val passphrase: String = "",
     val defaultRemotePath: String = "",
+    val proxyJump: String = "",
+    val portForwards: List<SshForwardRule> = emptyList(),
     val rememberCredentials: Boolean = true,
     val lastConnectedAt: Long = 0L,
 ) {

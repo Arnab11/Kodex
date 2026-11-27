@@ -44,17 +44,20 @@ object TerminalHub {
     /** The nav host listens and shows the terminal screen. */
     val navEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
+    /** Tablet workspace/editor listens and opens the terminal in the bottom split pane. */
+    val splitEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     private var nextId = 1
 
     /** Workspace "Terminal": reuse a live tab for [dir] if there is one, else open a new tab. */
-    fun open(context: Context, dir: File): Boolean {
+    fun open(context: Context, dir: File, inSplit: Boolean = false): Boolean {
         TerminalPrefs.ensure(context)
         lastDir = dir
         val live = tabs.firstOrNull {
             it.session.dir == dir && (it.session.state == RemoteSession.State.RUNNING || it.session.state == RemoteSession.State.STARTING || it.session.state == RemoteSession.State.RECONNECTING)
         }
         if (live != null) selectedId = live.id else newTab(context, dir)
-        navEvents.tryEmit(Unit)
+        if (inSplit) splitEvents.tryEmit(Unit) else navEvents.tryEmit(Unit)
         return true
     }
 
@@ -91,6 +94,7 @@ object TerminalHub {
         host: com.invictus.kodex.core.ssh.SshHostConfig,
         sshManager: com.invictus.kodex.core.ssh.SshConnectionManager,
         remoteDir: String? = null,
+        inSplit: Boolean = false,
     ): Boolean {
         TerminalPrefs.ensure(context)
         val live = tabs.firstOrNull {
@@ -104,7 +108,7 @@ object TerminalHub {
         } else {
             newSshTab(context, host, sshManager, remoteDir) ?: return false
         }
-        navEvents.tryEmit(Unit)
+        if (inSplit) splitEvents.tryEmit(Unit) else navEvents.tryEmit(Unit)
         return true
     }
 

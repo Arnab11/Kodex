@@ -241,7 +241,7 @@ fun WorkspaceScreen(
     val openTermux: () -> Unit = openTermux@{
         com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
         if (com.invictus.kodex.terminal.TerminalPrefs.inAppActive) {
-            com.invictus.kodex.terminal.TerminalHub.open(context, state.root)
+            com.invictus.kodex.terminal.TerminalHub.open(context, state.root, inSplit = isTablet && editorViewModel != null)
             return@openTermux
         }
         if (TermuxLauncher.openSession(context, state.root)) {
@@ -278,7 +278,13 @@ fun WorkspaceScreen(
         val sshMgr = (context.applicationContext as KodexApp).container.sshConnectionManager
         val conn = sshMgr.currentConnected()
         if (conn != null) {
-            com.invictus.kodex.terminal.TerminalHub.openSsh(context, conn.host, sshMgr, conn.remoteRoot)
+            com.invictus.kodex.terminal.TerminalHub.openSsh(
+                context,
+                conn.host,
+                sshMgr,
+                conn.remoteRoot,
+                inSplit = isTablet && editorViewModel != null,
+            )
         }
     }
     val onOpenTerminal: () -> Unit = {
@@ -379,6 +385,77 @@ fun WorkspaceScreen(
 
     if (isTablet && editorViewModel != null) {
         val editorState by editorViewModel.uiState.collectAsStateWithLifecycle()
+        var showEmptyTerminalSplit by rememberSaveable { mutableStateOf(false) }
+        var isEmptyVerticalSplit by rememberSaveable { mutableStateOf(false) }
+        var emptyTerminalSplitRatio by rememberSaveable { mutableFloatStateOf(0.6f) }
+        LaunchedEffect(editorState.tabs.isEmpty()) {
+            if (editorState.tabs.isEmpty()) {
+                com.invictus.kodex.terminal.TerminalHub.splitEvents.collect {
+                    showEmptyTerminalSplit = true
+                }
+            }
+        }
+        val emptyPaneWithOptionalTerminal: @Composable ((@Composable () -> Unit)?) -> Unit = { navIcon ->
+            val emptyPane: @Composable (Modifier) -> Unit = { m ->
+                Box(m) {
+                    WorkspaceEmptyEditorPane(
+                        projectRoot = state.root,
+                        onOpenSearch = { onOpenCodeSearch(state.root) },
+                        onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
+                        onOpenSettings = onOpenSettings,
+                        navigationIcon = navIcon,
+                        sidebarOnRight = sidebarOnRight,
+                    )
+                }
+            }
+            if (showEmptyTerminalSplit) {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val terminalArea: @Composable (Modifier) -> Unit = { m ->
+                    com.invictus.kodex.feature.terminal.TerminalScreen(
+                        onBack = { showEmptyTerminalSplit = false },
+                        onOpenSetup = onOpenTermuxSetup,
+                        isSplit = true,
+                        isVerticalSplit = isEmptyVerticalSplit,
+                        onToggleSplitOrientation = { isEmptyVerticalSplit = !isEmptyVerticalSplit },
+                        onCloseSplit = { showEmptyTerminalSplit = false },
+                        modifier = m,
+                    )
+                }
+                if (!isEmptyVerticalSplit) {
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val totalHeightPx = with(density) { maxHeight.toPx() }
+                        Column(Modifier.fillMaxSize()) {
+                            emptyPane(Modifier.weight(emptyTerminalSplitRatio).fillMaxWidth())
+                            com.invictus.kodex.ui.components.HorizontalSplitHandle(
+                                onDragDeltaPx = { deltaY ->
+                                    if (totalHeightPx > 0f) {
+                                        emptyTerminalSplitRatio = (emptyTerminalSplitRatio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
+                                    }
+                                },
+                            )
+                            terminalArea(Modifier.weight(1f - emptyTerminalSplitRatio).fillMaxWidth())
+                        }
+                    }
+                } else {
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val totalWidthPx = with(density) { maxWidth.toPx() }
+                        Row(Modifier.fillMaxSize()) {
+                            emptyPane(Modifier.weight(emptyTerminalSplitRatio).fillMaxHeight())
+                            com.invictus.kodex.ui.components.VerticalSplitHandle(
+                                onDragDeltaPx = { deltaX ->
+                                    if (totalWidthPx > 0f) {
+                                        emptyTerminalSplitRatio = (emptyTerminalSplitRatio + deltaX / totalWidthPx).coerceIn(0.15f, 0.85f)
+                                    }
+                                },
+                            )
+                            terminalArea(Modifier.weight(1f - emptyTerminalSplitRatio).fillMaxHeight())
+                        }
+                    }
+                }
+            } else {
+                emptyPane(Modifier.fillMaxSize())
+            }
+        }
         val showSidebarButton: @Composable () -> Unit = {
             IconButton(onClick = { sidebarCollapsed = false }) {
                 Icon(XIcons.Menu, contentDescription = "Expand explorer")
@@ -399,14 +476,7 @@ fun WorkspaceScreen(
                         onOpenTermuxSetup = onOpenTermuxSetup,
                     )
                 } else {
-                    WorkspaceEmptyEditorPane(
-                        projectRoot = state.root,
-                        onOpenSearch = { onOpenCodeSearch(state.root) },
-                        onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
-                        onOpenSettings = onOpenSettings,
-                        navigationIcon = showSidebarButton,
-                        sidebarOnRight = sidebarOnRight,
-                    )
+                    emptyPaneWithOptionalTerminal(showSidebarButton)
                 }
             }
         } else {
@@ -434,14 +504,7 @@ fun WorkspaceScreen(
                         onOpenTermuxSetup = onOpenTermuxSetup,
                     )
                 } else {
-                    WorkspaceEmptyEditorPane(
-                        projectRoot = state.root,
-                        onOpenSearch = { onOpenCodeSearch(state.root) },
-                        onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
-                        onOpenSettings = onOpenSettings,
-                        navigationIcon = null,
-                        sidebarOnRight = sidebarOnRight,
-                    )
+                    emptyPaneWithOptionalTerminal(null)
                 }
             }
 

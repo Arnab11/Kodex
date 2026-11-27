@@ -17,3 +17,7 @@ release.jks
 # Image tracer native core
 native/target/
 app/src/main/jniLibs/
+
+# Pages staging (scripts/stage_pages.py, preview.yml)
+/site/
+/preview-assets/

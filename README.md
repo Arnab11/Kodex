@@ -27,6 +27,14 @@
   <img src="https://img.shields.io/badge/Kotlin-Compose%20%2F%20Material%203-7F52FF.svg?logo=kotlin&logoColor=white" />
   <img src="https://img.shields.io/github/v/release/Utsavrajputt/kodex.svg?logo=github&label=Release&include_prereleases&cacheSeconds=3600" />
   <img src="https://img.shields.io/github/downloads/Utsavrajputt/kodex/total?logo=github&cacheSeconds=3600" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" /></a>
+  <a href="https://utsavrajputt.github.io/Kodex/"><img src="https://img.shields.io/badge/Downloads-Stable%20%26%20Preview-2ea44f.svg" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Utsavrajputt/Kodex/releases/latest"><b>⬇️ Stable</b></a> ·
+  <a href="https://utsavrajputt.github.io/Kodex/#preview"><b>🧪 Preview builds</b></a> ·
+  <a href="https://utsavrajputt.github.io/Kodex/"><b>🌐 Download site</b></a>
 </p>
 
 <p align="center">
@@ -309,6 +317,20 @@ can actually use:
 
 x86 / x86_64 builds are intentionally not produced.
 
+### Stable vs. Preview
+
+| Channel | What it is | Where to get it |
+|---|---|---|
+| **Stable** | Tagged release (`vX.Y.Z`), notes in [CHANGELOG.md](CHANGELOG.md) | [GitHub Releases](https://github.com/Utsavrajputt/Kodex/releases/latest) or the [download site](https://utsavrajputt.github.io/Kodex/#release) |
+| **Preview** | Signed build of the latest `main`, may be unstable; the newest 3 stay online | [Download site → Preview](https://utsavrajputt.github.io/Kodex/#preview) |
+
+Both are signed with the same key, so a preview installs over a stable build and the other way round.
+Every preview has a `SHA256SUMS` file next to its APKs, and every stable release lists its checksums in the notes.
+
+**Updating inside the app:** *Settings → About → Check for updates*. Pick the **Stable** or **Preview**
+channel there; the app downloads the APK for your phone (resumable, checksum-verified) and hands it to the system
+installer. Checking at launch is optional and off by default.
+
 ---
 
 ## 📲 Installing & Play Protect
@@ -383,6 +405,18 @@ checksums and notes pulled from `CHANGELOG.md`:
 
 Both fail if any signing secret is missing — a release is never published unsigned.
 
+Two more workflows publish the [download site](https://utsavrajputt.github.io/Kodex/) on GitHub Pages:
+
+- **`.github/workflows/preview.yml`** — *Run workflow* (manual) builds signed preview APKs and publishes them to the site under
+  `/previews/r<run number>/` (not as a GitHub Release). The newest 3 stay online; older ones are dropped by
+  [`scripts/stage_pages.py`](scripts/stage_pages.py). The app's **Preview** channel reads this workflow's successful runs
+  and compares the run number with its own `BuildConfig.PREVIEW_RUN`.
+- **`.github/workflows/deploy-site.yml`** — re-publishes the site (and the current previews) when
+  `fastlane/metadata/android/preview-site/**` changes on `main`.
+
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**, and the same signing
+secrets as the release workflows (`KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`).
+
 To cut a release:
 
 1. In `CHANGELOG.md`, add a `## [x.y.z] - YYYY-MM-DD` section for the release (the workflows use the
@@ -419,6 +453,13 @@ Run workflow** and typing the tag name, without pushing a tag first.
 - `REQUEST_INSTALL_PACKAGES` — install APKs you download from your GitHub builds (only after you tap *Install*)
 - `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` — keep long GitHub jobs and AI replies running while the app is in the background
 - `com.termux.permission.RUN_COMMAND` — optional: lets Kodex ask the Termux app to open a session or run a command, only after you enable the terminal and allow it
+
+---
+
+## 📄 License
+
+Kodex is free software under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
+Third-party components and their licenses are listed in [NOTICE](NOTICE).
 
 ---
 

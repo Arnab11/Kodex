@@ -1,0 +1,18 @@
+{
+  "name": "Kodex Preview & Releases",
+  "short_name": "Kodex",
+  "description": "Preview and stable release builds for Kodex, the native Android code editor with real Git.",
+  "start_url": "/Kodex/",
+  "scope": "/Kodex/",
+  "display": "standalone",
+  "background_color": "#0E1521",
+  "theme_color": "#5B8CFF",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

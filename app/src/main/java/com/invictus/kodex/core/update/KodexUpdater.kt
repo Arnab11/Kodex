@@ -2,6 +2,8 @@ package com.invictus.kodex.core.update
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
+import com.invictus.kodex.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -62,7 +64,16 @@ internal object UpdateVersion {
 }
 
 object UpdateChecker {
-    private const val RELEASES_URL = "https://api.github.com/repos/Utsavrajputt/Kodex/releases?per_page=20"
+    private const val TAG = "KodexUpdate"
+    private const val REPO = "Utsavrajputt/Kodex"
+    private const val RELEASES_URL = "https://api.github.com/repos/$REPO/releases?per_page=20"
+
+    /** Newest successful run of .github/workflows/preview.yml (no token needed, the repo is public). */
+    private const val PREVIEW_RUNS_URL =
+        "https://api.github.com/repos/$REPO/actions/workflows/preview.yml/runs?status=success&per_page=1"
+
+    /** GitHub Pages site; preview APKs live under /previews/r<run>/ (see scripts/stage_pages.py). */
+    const val SITE_URL = "https://utsavrajputt.github.io/Kodex"
     private val CHECKSUM = Regex("""([0-9a-fA-F]{64})\s+\*?(\S+\.apk)""")
 
     internal val http: OkHttpClient by lazy {
@@ -74,6 +85,9 @@ object UpdateChecker {
 
     /** Asks GitHub for the newest release of [channel] and compares it with [installedVersionName]. Blocking: call off the main thread. */
     fun check(channel: UpdateChannel, installedVersionName: String): CheckResult {
+        // Preview: the newest successful preview.yml run (APKs on Pages) is the primary feed. Without one
+        // (no run yet, GitHub unreachable) fall through to hand-cut pre-releases below.
+        if (channel == UpdateChannel.PREVIEW) checkPreviewRun()?.let { return it }
         val installed = UpdateVersion.code(installedVersionName)
             ?: return CheckResult.Failed("Unknown installed version: $installedVersionName")
         val body = try {
@@ -117,6 +131,110 @@ object UpdateChecker {
             )
         }
         return best?.let { CheckResult.Available(it.second) } ?: CheckResult.UpToDate
+    }
+
+    // ---- Preview builds (Pages) ------------------------------------------------------------------------
+
+    private fun getJson(url: String, timeoutMs: Long = 0L): String? = try {
+        val client = if (timeoutMs > 0) http.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build() else http
+        client.newCall(
+            Request.Builder().url(url)
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .build(),
+        ).execute().use { r -> if (r.isSuccessful) r.body?.string() else null }
+    } catch (e: IOException) {
+        null
+    }
+
+    /**
+     * Result for the Preview channel from the newest successful preview.yml run, or null when that feed is
+     * unavailable. A run only succeeds after its APKs were deployed to Pages, so the files exist once it is listed.
+     */
+    private fun checkPreviewRun(): CheckResult? {
+        val run = runCatching {
+            JSONObject(getJson(PREVIEW_RUNS_URL) ?: return null).optJSONArray("workflow_runs")?.optJSONObject(0)
+        }.getOrNull() ?: return null
+        val number = run.optInt("run_number", 0)
+        if (number <= 0) return null
+        val sha = run.optString("head_sha")
+        if (number <= BuildConfig.PREVIEW_RUN) return CheckResult.UpToDate
+        if (currentBuildCoversPreview(sha, run.optString("updated_at"))) return CheckResult.UpToDate
+
+        val abis = Build.SUPPORTED_ABIS.filter { it == "arm64-v8a" || it == "armeabi-v7a" } + "universal"
+        val abi = abis.first()
+        val name = "Kodex-$abi-preview-r$number.apk"
+        val base = "$SITE_URL/previews/r$number"
+        val notes = previewNotes(sha)
+        return CheckResult.Available(
+            UpdateInfo(
+                tag = "preview-r$number",
+                version = "preview r$number",
+                notes = notes,
+                pageUrl = run.optString("html_url").ifBlank { "https://github.com/$REPO/actions/workflows/preview.yml" },
+                prerelease = true,
+                asset = UpdateAsset(name, "$base/$name", 0L),
+                sha256 = previewChecksum("$base/SHA256SUMS", name),
+            ),
+        )
+    }
+
+    /**
+     * True when this build is at or past the preview, i.e. offering it would be a downgrade. Builds that did not
+     * come from preview.yml have PREVIEW_RUN == 0, so the run number alone calls every preview newer. For those:
+     * ask GitHub how our commit relates to the preview's ("ahead" / "identical" = covered, "behind" = really newer);
+     * if that can't be answered, a build compiled after the preview run finished is newer.
+     */
+    private fun currentBuildCoversPreview(previewSha: String, updatedAt: String): Boolean {
+        if (BuildConfig.PREVIEW_RUN > 0) return false
+        val own = BuildConfig.GIT_SHA.takeIf { it.isNotBlank() }
+        if (previewSha.isNotBlank() && own != null) {
+            if (previewSha.equals(own, ignoreCase = true)) return true
+            val status = runCatching {
+                JSONObject(getJson("https://api.github.com/repos/$REPO/compare/$previewSha...$own", 6_000) ?: "{}").optString("status")
+            }.getOrDefault("")
+            when (status) {
+                "ahead", "identical" -> return true
+                "behind" -> return false
+            }
+        }
+        val at = runCatching {
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .parse(updatedAt)?.time
+        }.getOrNull() ?: return false
+        Log.i(TAG, "preview built at $at, this build at ${BuildConfig.BUILD_TIME_MS}")
+        return BuildConfig.BUILD_TIME_MS > at
+    }
+
+    /** "What's new" for a preview: the commit subjects since this build (or the latest ones), best effort. */
+    private fun previewNotes(headSha: String): String {
+        val head = if (headSha.isNotBlank()) "Automatic preview from ${headSha.take(7)}." else "Automatic preview build."
+        if (headSha.isBlank()) return head
+        val own = BuildConfig.GIT_SHA.takeIf { it.isNotBlank() && !it.equals(headSha, ignoreCase = true) }
+        val messages = runCatching {
+            val fromCompare = own?.let {
+                getJson("https://api.github.com/repos/$REPO/compare/$it...$headSha", 6_000)
+                    ?.let { b -> JSONObject(b).optJSONArray("commits") }
+                    ?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.optJSONObject("commit")?.optString("message") }.asReversed() }
+            }
+            fromCompare ?: getJson("https://api.github.com/repos/$REPO/commits?sha=$headSha&per_page=10", 6_000)
+                ?.let { JSONArray(it) }
+                ?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.optJSONObject("commit")?.optString("message") } }
+        }.getOrNull().orEmpty()
+        val subjects = messages.map { it.lineSequence().first().trim() }.filter { it.isNotEmpty() }.take(12)
+        return if (subjects.isEmpty()) head else head + "\n\n" + subjects.joinToString("\n") { "- $it" }
+    }
+
+    /** SHA-256 of [name] from the preview's SHA256SUMS file on Pages; null when it can't be read (no check then). */
+    private fun previewChecksum(url: String, name: String): String? = try {
+        http.newBuilder().callTimeout(6, TimeUnit.SECONDS).build()
+            .newCall(Request.Builder().url(url).build()).execute().use { r ->
+                if (!r.isSuccessful) null
+                else CHECKSUM.findAll(r.body?.string().orEmpty()).firstOrNull { it.groupValues[2] == name }?.groupValues?.get(1)?.lowercase()
+            }
+    } catch (e: IOException) {
+        null
     }
 
     /** The APK for this phone's best ABI, else the universal one. Assets are named kodex-<tag>-<abi>.apk. */

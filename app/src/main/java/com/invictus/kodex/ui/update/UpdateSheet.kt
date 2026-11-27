@@ -82,7 +82,7 @@ private fun Header(info: UpdateInfo) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
                 Text(
-                    "v" + info.version,
+                    (if (info.version.firstOrNull()?.isDigit() == true) "v" else "") + info.version,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,

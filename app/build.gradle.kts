@@ -20,6 +20,12 @@ android {
         // Commit this build was made from (CI passes -PgitSha=<full sha>). Empty for local builds.
         // GitHub Manager compares it with the commit of a downloaded APK to show Open vs Update.
         buildConfigField("String", "GIT_SHA", "\"${(project.findProperty("gitSha") as String?).orEmpty().trim()}\"")
+        // When this APK was compiled. A non-preview build (PREVIEW_RUN == 0) compiled after a preview run
+        // finished is newer than that preview, even if the commit compare is unavailable.
+        buildConfigField("long", "BUILD_TIME_MS", "${System.currentTimeMillis()}L")
+        // Run number of the preview.yml workflow run that built this APK (0 for every other build).
+        // The Preview update channel compares it with the newest successful run of that workflow.
+        buildConfigField("int", "PREVIEW_RUN", "0")
     }
 
     buildTypes {
@@ -41,6 +47,14 @@ android {
             // build / release workflows) or manually for local release testing), keeping build and
             // sign as separate, visible steps.
         }
+        // Manual preview builds (preview.yml): a release clone with the same applicationId, so it installs
+        // over / under stable builds signed with the same key. Unsigned here for the same reason as `release`.
+        create("preview") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            versionNameSuffix = "-beta.r${previewRun()}"
+            buildConfigField("int", "PREVIEW_RUN", previewRun())
+        }
     }
 
     compileOptions {
@@ -50,10 +64,10 @@ android {
 
     // One APK per ABI (arm64-v8a, armeabi-v7a; each contains only that ABI's native libs)
     // + a universal APK. x86 / x86_64 are intentionally not built.
-    // Only for release builds so local debug installs stay a single APK.
+    // Only for release / preview builds so local debug installs stay a single APK.
     splits {
         abi {
-            isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+            isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) || it.contains("Preview", ignoreCase = true) }
             reset()
             include("arm64-v8a", "armeabi-v7a")
             isUniversalApk = true
@@ -139,3 +153,9 @@ tasks.register<Exec>("buildNative") {
     description = "Builds libkodex_vtracer.so for arm64-v8a and armeabi-v7a into src/main/jniLibs"
     commandLine("bash", rootProject.file(".github/scripts/build-native.sh").absolutePath)
 }
+
+// GITHUB_RUN_NUMBER is set by preview.yml (and any other CI run); locally it is missing, so 0 -- a local
+// preview build then always offers the latest preview. Must stay a plain integer: it is emitted as
+// `int PREVIEW_RUN` into BuildConfig.
+fun previewRun(): String =
+    System.getenv("GITHUB_RUN_NUMBER")?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: "0"

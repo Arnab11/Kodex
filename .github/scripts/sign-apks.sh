@@ -2,9 +2,10 @@
 # Signs every unsigned release APK with apksigner.
 #
 #   usage: sign-apks.sh [--require-secrets]
+#   env  : APK_VARIANT=release (default) | preview   -> which build type's unsigned APKs to sign
 #
 # Reads from the environment: KEYSTORE_BASE64, KEY_ALIAS, KEYSTORE_PASSWORD, KEY_PASSWORD.
-# Input : app/build/outputs/apk/release/app-<abi>-release-unsigned.apk
+# Input : app/build/outputs/apk/<variant>/app-<abi>-<variant>-unsigned.apk
 # Output: app/build/outputs/apk/signed/kodex-<abi>.apk   (...-unsigned.apk if unsigned)
 #
 # Without --require-secrets (normal CI builds, fork PRs) missing secrets just leave the APKs
@@ -14,7 +15,8 @@ set -euo pipefail
 require=false
 [[ "${1:-}" == "--require-secrets" ]] && require=true
 
-in_dirs=(app/build/outputs/apk/release)
+variant="${APK_VARIANT:-release}"
+in_dirs=(app/build/outputs/apk/$variant)
 out_dir=app/build/outputs/apk/signed
 mkdir -p "$out_dir"
 
@@ -22,13 +24,13 @@ shopt -s nullglob
 unsigned=()
 for d in "${in_dirs[@]}"; do unsigned+=("$d"/*-unsigned.apk); done
 if [[ ${#unsigned[@]} -eq 0 ]]; then
-  echo "Missing expected unsigned release APKs in ${in_dirs[*]}" >&2
+  echo "Missing expected unsigned $variant APKs in ${in_dirs[*]}" >&2
   find app/build/outputs/apk -type f -name '*.apk' -print || true
   exit 1
 fi
 
 # app-arm64-v8a-release-unsigned.apk -> arm64-v8a ; app-universal-... -> universal
-abi_of() { basename "$1" | sed -E 's/^app-(.*)-release-unsigned\.apk$/\1/'; }
+abi_of() { basename "$1" | sed -E "s/^app-(.*)-${variant}-unsigned\.apk$/\1/"; }
 
 if [[ -z "${KEYSTORE_BASE64:-}" ]]; then
   if $require; then

@@ -1,0 +1,156 @@
+name: Preview Build
+
+# Manual preview build. Builds signed preview APKs and publishes them on the
+# GitHub Pages site under /previews/r<run number>/ -- NOT as a GitHub Release.
+# The last 3 previews stay online (older ones are dropped, see
+# scripts/stage_pages.py). The app's Preview update channel detects new builds
+# from this workflow's successful runs and downloads the APKs from Pages.
+#
+# Scheduled/automatic builds are switched off. To turn them back on add
+# a `schedule:` (or `push:`) trigger below.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+# Same group as deploy-site.yml: both replace the single Pages deployment, so
+# they must never run at the same time (and never cancel each other).
+concurrency:
+  group: kodex-pages
+  cancel-in-progress: false
+
+env:
+  # arm64-v8a, armeabi-v7a, universal -- matches pickAsset() in KodexUpdater.kt.
+  ABIS: arm64-v8a armeabi-v7a universal
+  KEEP_PREVIEWS: 3
+
+jobs:
+  build-preview:
+    name: Build and publish preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # A preview must install over the latest stable (Android refuses a lower versionCode), so it reuses
+      # that release's version code; the build type appends "-beta.r<run>" to the version name.
+      - name: Base version from the latest stable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+          if [[ -n "$latest" ]]; then
+            echo "Base version: $latest"
+            bash .github/scripts/version-from-tag.sh "$latest"
+          else
+            echo "No stable tag yet; using the defaults from app/build.gradle.kts"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Image tracer: the native VTracer core (Rust) is compiled for each ABI into app/src/main/jniLibs.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Build native image tracer
+        run: bash .github/scripts/build-native.sh
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # app/build.gradle.kts reads GITHUB_RUN_NUMBER into BuildConfig.PREVIEW_RUN;
+      # the app compares it with the newest successful run of this workflow.
+      - name: Build preview APKs
+        shell: bash
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          args=()
+          if [[ -n "${VERSION_NAME:-}" ]]; then
+            args+=("-PappVersionName=$VERSION_NAME" "-PappVersionCode=$VERSION_CODE")
+          fi
+          ./gradlew assemblePreview "${args[@]}" -PgitSha="$GIT_SHA" --stacktrace --no-daemon --max-workers=2
+
+      - name: Sign and verify preview APKs
+        shell: bash
+        env:
+          APK_VARIANT: preview
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash .github/scripts/sign-apks.sh --require-secrets
+
+      - name: Stage preview assets
+        shell: bash
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p preview-assets
+          for abi in $ABIS; do
+            src="app/build/outputs/apk/signed/kodex-${abi}.apk"
+            test -f "$src" || { echo "::error::Missing signed APK for ${abi}"; ls -l app/build/outputs/apk/signed; exit 1; }
+            cp "$src" "preview-assets/Kodex-${abi}-preview-r${RUN_NUMBER}.apk"
+          done
+          ls -l preview-assets
+
+      - name: Stage site with this preview and the previous ones
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          python3 scripts/stage_pages.py \
+            --out site \
+            --repo "$GITHUB_REPOSITORY" \
+            --site-url "https://${owner}.github.io/${repo_name}" \
+            --keep "$KEEP_PREVIEWS" \
+            --new-run "$RUN_NUMBER" \
+            --new-apks preview-assets
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

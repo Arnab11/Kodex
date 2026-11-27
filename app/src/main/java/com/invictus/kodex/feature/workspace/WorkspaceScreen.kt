@@ -395,6 +395,7 @@ fun WorkspaceScreen(
                 }
             }
         }
+        val emptyTerminalEnabled = state.sshSession != null || TermuxSetupPrefs.enabled(context).value
         val emptyPaneWithOptionalTerminal: @Composable ((@Composable () -> Unit)?) -> Unit = { navIcon ->
             val emptyPane: @Composable (Modifier) -> Unit = { m ->
                 Box(m) {
@@ -403,6 +404,13 @@ fun WorkspaceScreen(
                         onOpenSearch = { onOpenCodeSearch(state.root) },
                         onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                         onOpenSettings = onOpenSettings,
+                        onToggleTerminal = if (emptyTerminalEnabled) {
+                            {
+                                if (showEmptyTerminalSplit) showEmptyTerminalSplit = false
+                                else onOpenTerminal()
+                            }
+                        } else null,
+                        terminalActive = showEmptyTerminalSplit,
                         navigationIcon = navIcon,
                         sidebarOnRight = sidebarOnRight,
                     )
@@ -458,7 +466,11 @@ fun WorkspaceScreen(
         }
         val showSidebarButton: @Composable () -> Unit = {
             IconButton(onClick = { sidebarCollapsed = false }) {
-                Icon(XIcons.Menu, contentDescription = "Expand explorer")
+                Icon(
+                    XIcons.Menu,
+                    contentDescription = "Expand explorer",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
 
@@ -897,6 +909,8 @@ private fun WorkspaceEmptyEditorPane(
     onOpenSearch: () -> Unit,
     onOpenGit: (() -> Unit)?,
     onOpenSettings: () -> Unit,
+    onToggleTerminal: (() -> Unit)? = null,
+    terminalActive: Boolean = false,
     navigationIcon: (@Composable () -> Unit)? = null,
     sidebarOnRight: Boolean = false,
 ) {
@@ -905,26 +919,6 @@ private fun WorkspaceEmptyEditorPane(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        if (navigationIcon != null) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .height(56.dp)
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = if (sidebarOnRight) Arrangement.End else Arrangement.Start,
-                ) {
-                    navigationIcon()
-                }
-            }
-        }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -971,7 +965,7 @@ private fun WorkspaceEmptyEditorPane(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.search_code_title))
                 }
-                if (onOpenGit != null) {
+                    if (onOpenGit != null) {
                     FilledTonalButton(
                         onClick = onOpenGit,
                         shape = RoundedCornerShape(14.dp),
@@ -980,6 +974,43 @@ private fun WorkspaceEmptyEditorPane(
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.git_title))
                     }
+                }
+            }
+        }
+        if (navigationIcon != null || onToggleTerminal != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .height(56.dp)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!sidebarOnRight) {
+                    navigationIcon?.invoke()
+                    Spacer(Modifier.weight(1f))
+                    onToggleTerminal?.let { toggle ->
+                        IconButton(onClick = toggle) {
+                            Icon(
+                                XIcons.Terminal,
+                                contentDescription = stringResource(R.string.terminal_title),
+                                tint = if (terminalActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.weight(1f))
+                    onToggleTerminal?.let { toggle ->
+                        IconButton(onClick = toggle) {
+                            Icon(
+                                XIcons.Terminal,
+                                contentDescription = stringResource(R.string.terminal_title),
+                                tint = if (terminalActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                    navigationIcon?.invoke()
                 }
             }
         }

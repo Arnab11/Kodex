@@ -66,6 +66,14 @@ data class RenameState(val file: File, val error: UiText? = null)
 
 data class Clipboard(val file: File, val isCut: Boolean)
 
+data class SshSessionUi(
+    val hostLabel: String,
+    val endpoint: String,
+    val remoteRoot: String,
+    val reconnecting: Boolean = false,
+    val error: String? = null,
+)
+
 data class FileTreeUiState(
     val root: File,
     /** Null means "the device's internal storage root": the UI shows a friendly label. */
@@ -85,6 +93,8 @@ data class FileTreeUiState(
     val pinnedPaths: Set<String> = emptySet(),
     /** M7: repo-relative path -> git status stripe decoration (files and folders). */
     val gitDecorations: Map<String, GitPathDecoration> = emptyMap(),
+    /** Active remote SSH workspace, or null when browsing a local project. */
+    val sshSession: SshSessionUi? = null,
 )
 
 sealed interface FileTreeEvent {
@@ -139,6 +149,9 @@ sealed interface FileTreeEvent {
 
     /** "Done": leave the uploaded zip as it is and move on to the next one (if any). */
     data object SkipExtract : FileTreeEvent
+
+    data object DisconnectSsh : FileTreeEvent
+    data object ReconnectSsh : FileTreeEvent
 }
 
 /** One-shot things the screen must react to. */

@@ -56,6 +56,7 @@ class FileTreeViewModel(
     private val projects: ProjectRepository,
     private val storageRoot: File,
     private val settingsStore: EditorSettingsStore,
+    private val sshManager: com.invictus.kodex.core.ssh.SshConnectionManager? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -98,11 +99,17 @@ class FileTreeViewModel(
     /** Starts the file watcher and git status a moment after a project switch (see [switchRoot]). */
     private var settleJob: Job? = null
 
+    /** Local project root remembered while browsing a remote SSH workspace. */
+    private var localFallbackRoot: File? = null
+    private val isRemoteMode: Boolean
+        get() = _uiState.value.sshSession != null
+
     init {
         viewModelScope.launch { debounceWatcherEvents() }
         viewModelScope.launch { debounceGitEvents() }
         viewModelScope.launch { observePins() }
         viewModelScope.launch { restoreLastProject() }
+        viewModelScope.launch { observeSshConnection() }
         viewModelScope.launch {
             settingsStore.fileTreeShowHidden.collect { on -> publish { copy(showHidden = on) } }
         }
@@ -178,16 +185,102 @@ class FileTreeViewModel(
             }
             FileTreeEvent.ConfirmExtract -> confirmExtract()
             FileTreeEvent.SkipExtract -> nextZipOrClose()
+            FileTreeEvent.DisconnectSsh -> sshManager?.disconnect()
+            FileTreeEvent.ReconnectSsh -> {
+                viewModelScope.launch {
+                    if (sshManager?.reconnectIfNeeded() == true) {
+                        expanded.toList().forEach { loadDir(File(it)) }
+                    }
+                }
+            }
         }
     }
 
     // region project / pins
 
     private suspend fun restoreLastProject() {
+        val connectedSsh = sshManager?.currentConnected()
+        if (connectedSsh != null) {
+            enterSshWorkspace(connectedSsh)
+            return
+        }
+        if (sshManager?.hasPersistedActiveSession() == true) {
+            if (sshManager.reconnectIfNeeded()) {
+                sshManager.currentConnected()?.let {
+                    enterSshWorkspace(it)
+                    return
+                }
+            }
+        }
         // A project just opened from Home / All Projects is handed over directly (no wait for the recents write).
         val handed = handoffPath?.also { handoffPath = null }?.let(::File)?.takeIf { withContext(io) { it.isDirectory && it.canRead() } }
         val last = handed ?: projects.latestRecent()?.takeIf { withContext(io) { it.isDirectory && it.canRead() } }
         switchRoot(last ?: storageRoot, record = false)
+    }
+
+    private suspend fun observeSshConnection() {
+        val manager = sshManager ?: return
+        manager.connectionState.collect { connState ->
+            when (connState) {
+                is com.invictus.kodex.core.ssh.SshConnectionState.Connected -> {
+                    enterSshWorkspace(connState)
+                }
+                is com.invictus.kodex.core.ssh.SshConnectionState.Connecting -> {
+                    if (_uiState.value.sshSession != null) {
+                        publish { copy(sshSession = sshSession?.copy(reconnecting = true, error = null)) }
+                    }
+                }
+                is com.invictus.kodex.core.ssh.SshConnectionState.Error -> {
+                    if (_uiState.value.sshSession != null) {
+                        publish { copy(sshSession = sshSession?.copy(reconnecting = false, error = connState.message)) }
+                    }
+                }
+                is com.invictus.kodex.core.ssh.SshConnectionState.Disconnected -> {
+                    if (_uiState.value.sshSession != null) {
+                        publish { copy(sshSession = null, gitDecorations = emptyMap()) }
+                        switchRoot(localFallbackRoot ?: storageRoot, record = false)
+                        localFallbackRoot = null
+                    }
+                }
+            }
+        }
+    }
+
+    private fun enterSshWorkspace(conn: com.invictus.kodex.core.ssh.SshConnectionState.Connected) {
+        val mgr = sshManager ?: return
+        val mirrorDir = mgr.localFileFor(conn.remoteRoot) ?: conn.mirrorRoot
+        if (_uiState.value.sshSession == null) {
+            localFallbackRoot = root
+        }
+        val sessionUi = SshSessionUi(
+            hostLabel = conn.host.displayName,
+            endpoint = conn.host.endpoint,
+            remoteRoot = conn.remoteRoot,
+        )
+        if (root.path == mirrorDir.path && _uiState.value.sshSession == sessionUi) return
+        watcher.stop()
+        gitRepoWatcher.stop()
+        loadJobs.values.forEach { it.cancel() }
+        loadJobs.clear()
+        loading.clear()
+        children.clear()
+        expanded.clear()
+        root = mirrorDir
+        ready = true
+        expanded += mirrorDir.path
+        rootPath.value = mirrorDir.path
+        publish {
+            copy(
+                root = mirrorDir,
+                rootName = conn.remoteRoot.substringAfterLast('/').ifEmpty { "/" },
+                renaming = null,
+                dialog = null,
+                rootError = null,
+                gitDecorations = emptyMap(),
+                sshSession = sessionUi,
+            )
+        }
+        loadDir(mirrorDir)
     }
 
     private fun openProject(dir: File) {
@@ -307,6 +400,25 @@ class FileTreeViewModel(
             return
         }
         viewModelScope.launch {
+            if (isRemoteMode) {
+                val mgr = sshManager!!
+                val remotePath = mgr.remotePathFor(file)
+                if (remotePath != null) {
+                    loading += file.path
+                    publish()
+                    val download = mgr.downloadToMirror(remotePath, file)
+                    loading -= file.path
+                    publish()
+                    if (download.isFailure) {
+                        _effects.send(
+                            FileTreeEffect.Message(
+                                UiText(R.string.ssh_err_download, listOf(file.name, download.exceptionOrNull()?.message ?: "")),
+                            ),
+                        )
+                        return@launch
+                    }
+                }
+            }
             when (val decision = openPolicy.check(file)) {
                 OpenDecision.Open -> _effects.send(FileTreeEffect.OpenFile(file))
                 else -> publish { copy(dialog = TreeDialog.OpenWarning(file, decision)) }
@@ -331,6 +443,14 @@ class FileTreeViewModel(
     }
 
     private fun refreshAll() {
+        if (isRemoteMode) {
+            viewModelScope.launch {
+                if (sshManager?.reconnectIfNeeded() == true) {
+                    expanded.toList().forEach { loadDir(File(it)) }
+                }
+            }
+            return
+        }
         expanded.toList().forEach { loadDir(File(it)) }
         pinTick.update { it + 1 }
         refreshGitDecorations()
@@ -393,7 +513,21 @@ class FileTreeViewModel(
         loadJobs.remove(path)?.cancel()
         loading += path
         loadJobs[path] = viewModelScope.launch {
-            when (val result = fileOps.list(dir)) {
+            val result: FsResult<List<FsEntry>> = if (isRemoteMode) {
+                val mgr = sshManager!!
+                val remotePath = mgr.remotePathFor(dir) ?: "/"
+                when (val sftpRes = mgr.list(remotePath)) {
+                    is FsResult.Ok -> FsResult.Ok(
+                        sftpRes.value.mapNotNull { entry ->
+                            mgr.localFileFor(entry.remotePath)?.let { FsEntry(it, entry.isDirectory) }
+                        },
+                    )
+                    is FsResult.Err -> sftpRes
+                }
+            } else {
+                fileOps.list(dir)
+            }
+            when (result) {
                 is FsResult.Ok -> {
                     children[path] = result.value
                     if (path == root.path) publish { copy(rootError = null) }
@@ -446,6 +580,10 @@ class FileTreeViewModel(
     }
 
     private fun syncWatcher() {
+        if (isRemoteMode) {
+            watcher.stop()
+            return
+        }
         watcher.setWatched(expanded.map { File(it) })
     }
 
@@ -481,7 +619,18 @@ class FileTreeViewModel(
     private fun confirmCreate(name: String) {
         val pending = _uiState.value.dialog as? TreeDialog.Create ?: return
         viewModelScope.launch {
-            val result = if (pending.isFolder) {
+            val result: FsResult<File> = if (isRemoteMode) {
+                val mgr = sshManager!!
+                val remoteParent = mgr.remotePathFor(pending.parent) ?: "/"
+                val sftpRes = if (pending.isFolder) mgr.createFolder(remoteParent, name) else mgr.createFile(remoteParent, name)
+                when (sftpRes) {
+                    is FsResult.Ok -> {
+                        val local = mgr.localFileFor(sftpRes.value)
+                        if (local != null) FsResult.Ok(local) else FsResult.Err(FsError.IO)
+                    }
+                    is FsResult.Err -> sftpRes
+                }
+            } else if (pending.isFolder) {
                 fileOps.createFolder(pending.parent, name)
             } else {
                 fileOps.createFile(pending.parent, name)
@@ -510,7 +659,28 @@ class FileTreeViewModel(
             return
         }
         viewModelScope.launch {
-            when (val result = fileOps.rename(state.file, newName)) {
+            val result: FsResult<File> = if (isRemoteMode) {
+                val mgr = sshManager!!
+                val oldRemote = mgr.remotePathFor(state.file) ?: ""
+                when (val sftpRes = mgr.rename(oldRemote, newName)) {
+                    is FsResult.Ok -> {
+                        val newLocal = mgr.localFileFor(sftpRes.value)
+                        if (newLocal != null) {
+                            withContext(io) {
+                                newLocal.parentFile?.mkdirs()
+                                if (state.file.exists()) state.file.renameTo(newLocal)
+                            }
+                            FsResult.Ok(newLocal)
+                        } else {
+                            FsResult.Err(FsError.IO)
+                        }
+                    }
+                    is FsResult.Err -> sftpRes
+                }
+            } else {
+                fileOps.rename(state.file, newName)
+            }
+            when (result) {
                 is FsResult.Ok -> {
                     projects.onPathMoved(state.file, result.value)
                     remapExpanded(state.file, result.value)
@@ -532,7 +702,16 @@ class FileTreeViewModel(
         val pending = _uiState.value.dialog as? TreeDialog.ConfirmDelete ?: return
         publish { copy(dialog = null) }
         viewModelScope.launch {
-            when (val result = fileOps.delete(pending.file)) {
+            val result: FsResult<Unit> = if (isRemoteMode) {
+                val mgr = sshManager!!
+                val remotePath = mgr.remotePathFor(pending.file) ?: ""
+                mgr.delete(remotePath, pending.isDirectory).also {
+                    if (it is FsResult.Ok) withContext(io) { pending.file.deleteRecursively() }
+                }
+            } else {
+                fileOps.delete(pending.file)
+            }
+            when (result) {
                 is FsResult.Ok -> {
                     projects.onPathDeleted(pending.file)
                     forget(pending.file)
@@ -558,7 +737,20 @@ class FileTreeViewModel(
     private fun duplicate(file: File) {
         if (file.path == root.path) return
         viewModelScope.launch {
-            when (val result = fileOps.duplicate(file)) {
+            val result: FsResult<File> = if (isRemoteMode) {
+                val mgr = sshManager!!
+                val remotePath = mgr.remotePathFor(file) ?: ""
+                when (val sftpRes = mgr.duplicate(remotePath, file.isDirectory)) {
+                    is FsResult.Ok -> {
+                        val local = mgr.localFileFor(sftpRes.value)
+                        if (local != null) FsResult.Ok(local) else FsResult.Err(FsError.IO)
+                    }
+                    is FsResult.Err -> sftpRes
+                }
+            } else {
+                fileOps.duplicate(file)
+            }
+            when (result) {
                 is FsResult.Ok -> file.parentFile?.let(::reloadIfExpanded)
                 is FsResult.Err -> _effects.send(FileTreeEffect.Message(result.toUiText()))
             }
@@ -734,6 +926,7 @@ class FileTreeViewModel(
                     projects = app.container.projectRepository,
                     storageRoot = Environment.getExternalStorageDirectory(),
                     settingsStore = app.container.editorSettingsStore,
+                    sshManager = app.container.sshConnectionManager,
                 )
             }
         }

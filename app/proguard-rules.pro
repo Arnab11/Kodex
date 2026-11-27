@@ -71,3 +71,6 @@
 # In-app terminal: Termux emulator (JitPack) + vendored terminal-view
 -keep class com.termux.** { *; }
 -dontwarn com.termux.**
+
+# SSH / SFTP (mwiede JSch): algorithm classes are loaded by name via Class.forName.
+-keep class com.jcraft.jsch.** { *; }

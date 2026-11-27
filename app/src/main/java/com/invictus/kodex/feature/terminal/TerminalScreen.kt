@@ -181,7 +181,12 @@ fun TerminalScreen(
     var renameTarget by remember { mutableStateOf<TerminalHub.Tab?>(null) }
 
     fun newTab() {
-        if (TerminalHub.newTab(app, selected?.session?.dir ?: TerminalHub.lastDir ?: app.filesDir) == null) {
+        val created = if (selected?.isSsh == true) {
+            TerminalHub.duplicate(app, selected)
+        } else {
+            TerminalHub.newTab(app, selected?.session?.dir ?: TerminalHub.lastDir ?: app.filesDir)
+        }
+        if (created == null) {
             scope.launch { snackbar.showSnackbar(app.getString(R.string.terminal_tab_limit, TerminalPrefs.maxTabs)) }
         }
     }

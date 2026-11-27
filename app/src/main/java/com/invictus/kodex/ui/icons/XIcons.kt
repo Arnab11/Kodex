@@ -618,4 +618,15 @@ object XIcons {
     val AutoAwesome: ImageVector = MaterialSymbols.RoundedFilled.Auto_awesome
     val Send: ImageVector = MaterialSymbols.RoundedFilled.Send
     val StopCircle: ImageVector = MaterialSymbols.RoundedFilled.Stop_circle
+
+    /** Material "dns" (server rack): Connect to SSH Host. */
+    val SshHost: ImageVector by lazy {
+        icon(
+            "SshHost",
+            "M20,13H4c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1v-6c0,-0.55 -0.45,-1 -1,-1z" +
+                "M7,19c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z" +
+                "M20,3H4c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1V4c0,-0.55 -0.45,-1 -1,-1z" +
+                "M7,9c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z",
+        )
+    }
 }

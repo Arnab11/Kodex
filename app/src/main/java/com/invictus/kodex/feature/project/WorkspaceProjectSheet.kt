@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -152,7 +153,12 @@ fun WorkspaceProjectSheet(
 private val StorageRootPath: String = Environment.getExternalStorageDirectory().path
 
 /** "Documents › .Modxzone › Projects": where the project lives, without the long /storage/emulated/0 prefix. */
+@Composable
 private fun parentLabel(item: RecentItem, internalLabel: String): String {
+    val context = LocalContext.current
+    com.invictus.kodex.core.ssh.SshConnectionManager.formatMirrorDisplayPath(context, item.file.path)?.let {
+        return it
+    }
     if (item.isDeviceStorage) return item.file.path
     val parent = item.file.parent ?: return item.file.path
     val relative = parent.removePrefix(StorageRootPath).trim('/')

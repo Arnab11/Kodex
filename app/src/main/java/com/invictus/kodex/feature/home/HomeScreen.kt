@@ -137,6 +137,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onProjectOpened: () -> Unit,
     onClone: () -> Unit = {},
+    onConnectSsh: () -> Unit = {},
     onOpenTools: () -> Unit = {},
     onViewAll: () -> Unit = {},
     onOpenTerminal: () -> Unit = {},
@@ -470,6 +471,7 @@ fun HomeScreen(
             onOpen = openProject,
             onCopyPath = copyPath,
             onDismiss = { showProjectSheet = false },
+            onSshWorkspaceOpened = onProjectOpened,
             // Home screen already shows Recent Projects behind the sheet; no need to repeat it here.
             showRecent = false,
         )

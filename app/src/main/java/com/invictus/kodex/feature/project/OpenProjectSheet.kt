@@ -119,11 +119,13 @@ fun OpenProjectSheet(
     // Home's pre-workspace "Open Project" sheet keeps the full search/browse flow.
     showSearch: Boolean = true,
     showBrowse: Boolean = true,
+    onSshWorkspaceOpened: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(Unit) { onEvent(ProjectsEvent.SheetOpened) }
     var editingShortcuts by remember { mutableStateOf(false) }
+    var showSshHosts by rememberSaveable { mutableStateOf(false) }
 
     val trimmed = query.trim()
     val typedPath = trimmed.takeIf { it.startsWith("/") }
@@ -185,9 +187,13 @@ fun OpenProjectSheet(
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        // Back gesture steps out of the folder (or clears the search) instead of closing the whole sheet.
-        BackHandler(enabled = query.isNotEmpty() || state.browseDir != null) {
-            if (query.isNotEmpty()) query = "" else onEvent(ProjectsEvent.BrowseUp)
+        // Back gesture steps out of SSH / folder / search instead of closing the whole sheet.
+        BackHandler(enabled = showSshHosts || query.isNotEmpty() || state.browseDir != null) {
+            when {
+                showSshHosts -> showSshHosts = false
+                query.isNotEmpty() -> query = ""
+                else -> onEvent(ProjectsEvent.BrowseUp)
+            }
         }
         val sheetFocus = LocalFocusManager.current
         val sheetKeyboard = LocalSoftwareKeyboardController.current
@@ -201,6 +207,17 @@ fun OpenProjectSheet(
         }
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth().then(heightModifier).imePadding()) {
+            if (showSshHosts && onSshWorkspaceOpened != null) {
+                com.invictus.kodex.feature.ssh.SshHostsSheetContent(
+                    onBack = { showSshHosts = false },
+                    onOpenWorkspace = {
+                        onDismiss()
+                        onSshWorkspaceOpened()
+                    },
+                    snackbarHostState = snackbarHostState,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            } else {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -255,6 +272,49 @@ fun OpenProjectSheet(
                 )
             }
             val browsingDir = state.browseDir.takeIf { showBrowse && needle.isEmpty() }
+            if (onSshWorkspaceOpened != null && browsingDir == null && needle.isEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .expressiveClickable(onClick = { showSshHosts = true }),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            XIcons.SshHost,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.ssh_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Text(
+                                text = stringResource(R.string.ssh_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                            )
+                        }
+                        Icon(
+                            XIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
             if (browsingDir != null) {
                 BreadcrumbBar(
                     dir = browsingDir,
@@ -344,6 +404,7 @@ fun OpenProjectSheet(
             }
             if (browsingDir != null && state.browseError == null) {
                 OpenFolderBar(dir = browsingDir, storageRoot = storageRoot, onOpen = { onOpen(browsingDir) })
+            }
             }
             SnackbarHost(snackbarHostState)
         }

@@ -52,6 +52,7 @@ class EditorViewModel(
     val textMate: TextMateSupport,
     private val sessionStore: EditorSessionStore,
     private val settingsStore: EditorSettingsStore,
+    private val sshManager: com.invictus.kodex.core.ssh.SshConnectionManager? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -741,6 +742,10 @@ class EditorViewModel(
             val hash = withContext(io) {
                 try {
                     TextFileIo.write(buffer.file, text, buffer.charset, buffer.hasBom, buffer.lineEnding)
+                    val remotePath = sshManager?.remotePathFor(buffer.file)
+                    if (remotePath != null) {
+                        sshManager.uploadFromMirror(buffer.file, remotePath).getOrThrow()
+                    }
                     // Words newly typed since the last open/save become autocomplete suggestions everywhere.
                     if (!buffer.isPaged && text.length <= LEARN_MAX_CHARS) {
                         buffer.knownTokens = textMate.userWords.learn(buffer.knownTokens, text)
@@ -909,7 +914,12 @@ class EditorViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as KodexApp
-                EditorViewModel(app.container.textMate, app.container.editorSessionStore, app.container.editorSettingsStore)
+                EditorViewModel(
+                    app.container.textMate,
+                    app.container.editorSessionStore,
+                    app.container.editorSettingsStore,
+                    app.container.sshConnectionManager,
+                )
             }
         }
     }

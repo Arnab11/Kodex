@@ -63,6 +63,8 @@ class RemoteSession(
 
     @Volatile private var out: OutputStream? = null
     @Volatile private var socket: Socket? = null
+    @Volatile private var sshHandle: com.invictus.kodex.core.ssh.SshShellHandle? = null
+    @Volatile private var isSshMode = false
     @Volatile private var closed = false
     @Volatile private var cols = 80
     @Volatile private var rows = 24
@@ -113,6 +115,59 @@ class RemoteSession(
                 if (s == null) break
             }
             main.post { onLost() }
+        }
+    }
+
+    /**
+     * Connects an interactive SSH PTY shell channel on [host] using [sshManager].
+     * Feeds the exact same [TerminalEmulator] as Termux tabs, without requiring Termux.
+     */
+    fun connectSsh(
+        host: com.invictus.kodex.core.ssh.SshHostConfig,
+        sshManager: com.invictus.kodex.core.ssh.SshConnectionManager,
+        initialDir: String? = null,
+        firstInput: String? = null,
+    ) {
+        isSshMode = true
+        main.post { title = host.displayName }
+        thread(name = "kodex-ssh-r$id", isDaemon = true) {
+            try {
+                val handle = sshManager.openShell(host, cols, rows, initialDir)
+                if (closed) {
+                    handle.close()
+                    return@thread
+                }
+                sshHandle = handle
+                synchronized(lock) { out = handle.outputStream }
+                flushUnsent()
+                handle.resize(cols, rows)
+                main.post {
+                    if (!closed && state == State.STARTING) state = State.RUNNING
+                }
+                if (!firstInput.isNullOrEmpty()) write(firstInput)
+
+                val buf = ByteArray(8192)
+                val input = handle.inputStream
+                while (!closed) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        while (!closed && synchronized(inboxLock) { inboxBytes } > MAX_INBOX) Thread.sleep(5)
+                        enqueue(buf.copyOf(n))
+                    }
+                }
+                val code = handle.exitStatus()
+                if (!closed) enqueue(code)
+            } catch (e: Exception) {
+                if (!closed) {
+                    val msg = e.message?.takeIf { it.isNotBlank() } ?: appContext.getString(R.string.ssh_err_shell)
+                    main.post { if (!closed) fail(msg) }
+                }
+            } finally {
+                synchronized(lock) { out = null }
+                runCatching { sshHandle?.close() }
+                sshHandle = null
+            }
         }
     }
 
@@ -178,6 +233,13 @@ class RemoteSession(
                 if (type == T_DATA && unsent.size() + data.size <= MAX_UNSENT) unsent.write(data)
                 return
             }
+            if (isSshMode) {
+                if (type == T_DATA && data.isNotEmpty()) {
+                    o.write(data)
+                    o.flush()
+                }
+                return
+            }
             val header = ByteBuffer.allocate(5).put(type.toByte()).putInt(data.size).array()
             o.write(header)
             if (data.isNotEmpty()) o.write(data)
@@ -197,6 +259,15 @@ class RemoteSession(
     }
 
     private fun sendResize() {
+        if (isSshMode) {
+            val handle = sshHandle ?: return
+            if (closed) return
+            try {
+                io.execute { handle.resize(cols, rows) }
+            } catch (_: RejectedExecutionException) {
+            }
+            return
+        }
         queue(T_RESIZE, ByteBuffer.allocate(4).putShort(cols.toShort()).putShort(rows.toShort()).array())
     }
 
@@ -256,6 +327,7 @@ class RemoteSession(
 
     private fun closeSocket() {
         try { socket?.close() } catch (_: IOException) {}
+        try { sshHandle?.close() } catch (_: Exception) {}
     }
 
     // ---------------------------------------------------------------- state (main thread)

@@ -23,6 +23,7 @@ slf4j = "2.0.19"
 commonsCompress = "1.27.1"
 xz = "1.10"
 junrar = "7.5.5"
+jsch = "0.2.23"
 
 [libraries]
 termux-terminal-emulator = { module = "com.github.termux.termux-app:terminal-emulator", version = "v0.118.0" }
@@ -57,6 +58,7 @@ tukaani-xz = { module = "org.tukaani:xz", version.ref = "xz" }
 junrar = { module = "com.github.junrar:junrar", version.ref = "junrar" }
 org-eclipse-jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+mwiede-jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

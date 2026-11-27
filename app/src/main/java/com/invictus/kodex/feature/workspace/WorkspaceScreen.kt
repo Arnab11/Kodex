@@ -274,7 +274,16 @@ fun WorkspaceScreen(
             else -> action()
         }
     }
-    val onOpenTerminal: () -> Unit = { withTermux(openTermux) }
+    val openSshTerminal: () -> Unit = {
+        val sshMgr = (context.applicationContext as KodexApp).container.sshConnectionManager
+        val conn = sshMgr.currentConnected()
+        if (conn != null) {
+            com.invictus.kodex.terminal.TerminalHub.openSsh(context, conn.host, sshMgr, conn.remoteRoot)
+        }
+    }
+    val onOpenTerminal: () -> Unit = {
+        if (state.sshSession != null) openSshTerminal() else withTermux(openTermux)
+    }
 
     // `kodex <folder>` in Termux asks for this folder to become the project.
     val pendingProjectDir by ExternalProjectOpen.pending.collectAsStateWithLifecycle()
@@ -309,7 +318,7 @@ fun WorkspaceScreen(
                     onOpenGitHub = { onOpenGitHub(state.root) },
                     onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
                     onOpenTerminal = onOpenTerminal,
-                    terminalEnabled = TermuxSetupPrefs.enabled(context).value,
+                    terminalEnabled = state.sshSession != null || TermuxSetupPrefs.enabled(context).value,
                     onOpenSettings = onOpenSettings,
                     onCollapseSidebar = onCollapse,
                     onToggleSidebarSide = onToggleSide,
@@ -340,6 +349,14 @@ fun WorkspaceScreen(
                     )
                 } else {
                     Column(Modifier.fillMaxSize()) {
+                        state.sshSession?.let { ssh ->
+                            SshWorkspaceBanner(
+                                session = ssh,
+                                onOpenTerminal = openSshTerminal,
+                                onReconnect = { viewModel.onEvent(FileTreeEvent.ReconnectSsh) },
+                                onDisconnect = { viewModel.onEvent(FileTreeEvent.DisconnectSsh) },
+                            )
+                        }
                         FileFilterBar(
                             query = filterQuery,
                             onQueryChange = { filterQuery = it },
@@ -494,6 +511,102 @@ fun WorkspaceScreen(
             onCopyPath = copyPath,
             onDismiss = { showProjectSheet = false },
         )
+    }
+}
+
+@Composable
+private fun SshWorkspaceBanner(
+    session: SshSessionUi,
+    onOpenTerminal: () -> Unit,
+    onReconnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    Surface(
+        color = if (session.error != null) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f)
+        } else {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (session.reconnecting) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(
+                            if (session.error != null) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary,
+                        ),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "SSH: ${session.hostLabel}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = when {
+                        session.reconnecting -> "Reconnecting…"
+                        session.error != null -> session.error
+                        else -> session.remoteRoot
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (session.error != null) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (session.error != null) {
+                TextButton(
+                    onClick = onReconnect,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.ssh_quick_connect_action),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = onOpenTerminal,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        XIcons.Terminal,
+                        contentDescription = stringResource(R.string.ssh_open_terminal),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            TextButton(
+                onClick = onDisconnect,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.ssh_disconnect),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
     }
 }
 

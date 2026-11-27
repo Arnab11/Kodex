@@ -143,6 +143,7 @@ fun KodexNavHost(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onProjectOpened = { navController.navigate(Routes.WORKSPACE) },
                 onClone = { navController.navigate(Routes.GIT_CLONE) },
+                onConnectSsh = { navController.navigate(Routes.SSH_HOSTS) },
                 onOpenTools = { navController.navigate(Routes.TOOLS) },
                 onViewAll = { navController.navigate(Routes.ALL_PROJECTS) },
                 onOpenTerminal = { navController.navigate(Routes.TERMINAL) },
@@ -204,6 +205,14 @@ fun KodexNavHost(
         }
         composable(Routes.TERMUX_SETUP) {
             com.invictus.kodex.feature.termux.TermuxSetupScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SSH_HOSTS) {
+            com.invictus.kodex.feature.ssh.SshHostsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenWorkspace = {
+                    navController.navigate(Routes.WORKSPACE) { launchSingleTop = true }
+                },
+            )
         }
         composable(Routes.EDITOR) {
             EditorScreen(

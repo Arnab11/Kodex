@@ -103,4 +103,12 @@ class AppContainer(context: Context) {
 
     /** App-level (global) git identity file holding user.name / user.email. */
     val gitGlobalIdentityFile: File by lazy { File(appContext.filesDir, "git_identity") }
+
+    // Remote SSH hosts + SFTP/shell connection manager.
+    val sshHostStore: com.invictus.kodex.core.ssh.SshHostStore by lazy {
+        com.invictus.kodex.core.ssh.SshHostStore(appContext)
+    }
+    val sshConnectionManager: com.invictus.kodex.core.ssh.SshConnectionManager by lazy {
+        com.invictus.kodex.core.ssh.SshConnectionManager(appContext, sshHostStore)
+    }
 }

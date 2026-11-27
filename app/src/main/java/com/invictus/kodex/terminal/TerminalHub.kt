@@ -20,8 +20,21 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * does not kill the shells. Tabs live until closed or until the process dies.
  */
 object TerminalHub {
-    class Tab(val id: Int, val session: RemoteSession, val accent: Int) {
+    class Tab(
+        val id: Int,
+        val session: RemoteSession,
+        val accent: Int,
+        val sshHost: com.invictus.kodex.core.ssh.SshHostConfig? = null,
+        val remoteDir: String? = null,
+        private val sshManager: com.invictus.kodex.core.ssh.SshConnectionManager? = null,
+    ) {
         var customName by mutableStateOf<String?>(null)
+        val isSsh: Boolean get() = sshHost != null
+        internal fun duplicateSsh(context: Context): Tab? {
+            val host = sshHost ?: return null
+            val mgr = sshManager ?: return null
+            return newSshTab(context, host, mgr, remoteDir)
+        }
     }
 
     val tabs = mutableStateListOf<Tab>()
@@ -69,7 +82,60 @@ object TerminalHub {
         return tab
     }
 
-    fun duplicate(context: Context, tab: Tab): Tab? = newTab(context, tab.session.dir)
+    fun duplicate(context: Context, tab: Tab): Tab? =
+        if (tab.isSsh) tab.duplicateSsh(context) else newTab(context, tab.session.dir)
+
+    /** Opens or reuses a live SSH terminal tab for [host] (optionally in [remoteDir]). */
+    fun openSsh(
+        context: Context,
+        host: com.invictus.kodex.core.ssh.SshHostConfig,
+        sshManager: com.invictus.kodex.core.ssh.SshConnectionManager,
+        remoteDir: String? = null,
+    ): Boolean {
+        TerminalPrefs.ensure(context)
+        val live = tabs.firstOrNull {
+            it.sshHost?.id == host.id &&
+                (it.session.state == RemoteSession.State.RUNNING ||
+                    it.session.state == RemoteSession.State.STARTING ||
+                    it.session.state == RemoteSession.State.RECONNECTING)
+        }
+        if (live != null) {
+            selectedId = live.id
+        } else {
+            newSshTab(context, host, sshManager, remoteDir) ?: return false
+        }
+        navEvents.tryEmit(Unit)
+        return true
+    }
+
+    fun newSshTab(
+        context: Context,
+        host: com.invictus.kodex.core.ssh.SshHostConfig,
+        sshManager: com.invictus.kodex.core.ssh.SshConnectionManager,
+        remoteDir: String? = null,
+        input: String? = null,
+    ): Tab? {
+        val app = context.applicationContext
+        TerminalPrefs.ensure(app)
+        if (tabs.size >= TerminalPrefs.maxTabs) return null
+        val id = nextId++
+        val placeholderDir = File(remoteDir ?: "/")
+        val session = RemoteSession(app, id, placeholderDir, TerminalPrefs.scrollback)
+        val tab = Tab(
+            id = id,
+            session = session,
+            accent = (id - 1) % ACCENT_COUNT,
+            sshHost = host,
+            remoteDir = remoteDir,
+            sshManager = sshManager,
+        ).apply {
+            customName = "SSH: ${host.displayName}"
+        }
+        tabs.add(tab)
+        selectedId = id
+        session.connectSsh(host, sshManager, remoteDir, input)
+        return tab
+    }
 
     fun close(tab: Tab) {
         val index = tabs.indexOf(tab)

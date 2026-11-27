@@ -80,6 +80,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
@@ -944,8 +945,13 @@ private fun RecentRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val context = LocalContext.current
+                val displayPath = remember(file.path) {
+                    com.invictus.kodex.core.ssh.SshConnectionManager.formatMirrorDisplayPath(context, file.path)
+                        ?: file.path
+                }
                 Text(
-                    text = if (item.exists) file.path else stringResource(R.string.sheet_folder_missing, file.path),
+                    text = if (item.exists) displayPath else stringResource(R.string.sheet_folder_missing, displayPath),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

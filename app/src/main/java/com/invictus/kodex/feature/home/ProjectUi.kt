@@ -192,8 +192,13 @@ internal fun ProjectCardRow(
                         )
                     }
                 }
+                val context = LocalContext.current
+                val displayPath = remember(item.file.path) {
+                    com.invictus.kodex.core.ssh.SshConnectionManager.formatMirrorDisplayPath(context, item.file.path)
+                        ?: item.file.path
+                }
                 Text(
-                    text = item.file.path,
+                    text = displayPath,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,

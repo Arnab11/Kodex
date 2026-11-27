@@ -687,6 +687,28 @@ class SshConnectionManager(
         private const val SOCKET_TIMEOUT_MS = 15_000
         private const val CHANNEL_TIMEOUT_MS = 10_000
         private const val KEEPALIVE_INTERVAL_MS = 10_000
+        private const val WORKSPACE_DIR_SEGMENT = "/ssh_workspaces/"
+
+        fun parseMirrorPath(localPath: String): Pair<String, String>? {
+            val idx = localPath.indexOf(WORKSPACE_DIR_SEGMENT)
+            if (idx < 0) return null
+            val rest = localPath.substring(idx + WORKSPACE_DIR_SEGMENT.length)
+            val slash = rest.indexOf('/')
+            if (slash <= 0) {
+                val hostId = rest.trimEnd('/')
+                return if (hostId.isNotEmpty()) hostId to "/" else null
+            }
+            val hostId = rest.substring(0, slash)
+            val remotePath = "/" + rest.substring(slash + 1).trimStart('/')
+            return hostId to remotePath
+        }
+
+        fun formatMirrorDisplayPath(context: Context, localPath: String): String? {
+            val (hostId, remotePath) = parseMirrorPath(localPath) ?: return null
+            val host = (context.applicationContext as? com.invictus.kodex.KodexApp)
+                ?.container?.sshHostStore?.get(hostId)
+            return if (host != null) "SSH: ${host.displayName} • $remotePath" else "SSH • $remotePath"
+        }
 
         fun normalizeRemotePath(path: String): String {
             val clean = path.trim().replace('\\', '/')

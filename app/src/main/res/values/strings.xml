@@ -1611,6 +1611,9 @@
     <string name="ssh_import_key">Import Key File</string>
     <string name="ssh_passphrase_optional">Key Passphrase (optional)</string>
     <string name="ssh_remote_path_optional">Remote Folder (optional, default ~)</string>
+    <string name="ssh_proxy_jump_optional">ProxyJump (optional, e.g. user@bastion)</string>
+    <string name="ssh_port_forwards_optional">Port Forwards (optional, e.g. L 8080:localhost:80)</string>
+    <string name="ssh_tunneling_toggle">SSH Tunneling (ProxyJump / Forwards)</string>
     <string name="ssh_remember_creds">Remember credentials (encrypted)</string>
     <string name="ssh_test_connection">Test Connection</string>
     <string name="ssh_testing">Testing…</string>

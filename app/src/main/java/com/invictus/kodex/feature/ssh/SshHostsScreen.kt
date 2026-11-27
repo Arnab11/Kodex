@@ -870,6 +870,15 @@ private fun SshHostCard(
                             append(" • ")
                             append(host.defaultRemotePath)
                         }
+                        if (host.proxyJump.isNotBlank()) {
+                            append(" • via ")
+                            append(host.proxyJump)
+                        }
+                        if (host.portForwards.isNotEmpty()) {
+                            append(" • ")
+                            append(host.portForwards.size)
+                            append(if (host.portForwards.size == 1) " tunnel" else " tunnels")
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -935,6 +944,13 @@ private fun SshHostFormSheet(
     var privateKey by remember(initial.id) { mutableStateOf(initial.privateKey) }
     var passphrase by remember(initial.id) { mutableStateOf(initial.passphrase) }
     var remotePath by remember(initial.id) { mutableStateOf(initial.defaultRemotePath) }
+    var tunnelingEnabled by remember(initial.id) {
+        mutableStateOf(initial.proxyJump.isNotBlank() || initial.portForwards.isNotEmpty())
+    }
+    var proxyJump by remember(initial.id) { mutableStateOf(initial.proxyJump) }
+    var portForwardsText by remember(initial.id) {
+        mutableStateOf(initial.portForwards.joinToString(", ") { it.toDisplayString() })
+    }
     var rememberCreds by remember(initial.id) { mutableStateOf(initial.rememberCredentials) }
 
     val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -960,6 +976,8 @@ private fun SshHostFormSheet(
         privateKey = privateKey,
         passphrase = passphrase,
         defaultRemotePath = remotePath.trim(),
+        proxyJump = if (tunnelingEnabled) proxyJump.trim() else "",
+        portForwards = if (tunnelingEnabled) com.invictus.kodex.core.ssh.SshConfigParser.parseForwardList(portForwardsText) else emptyList(),
         rememberCredentials = rememberCreds,
     )
 
@@ -1082,6 +1100,37 @@ private fun SshHostFormSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.ssh_tunneling_toggle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = tunnelingEnabled, onCheckedChange = { tunnelingEnabled = it })
+            }
+
+            if (tunnelingEnabled) {
+                OutlinedTextField(
+                    value = proxyJump,
+                    onValueChange = { proxyJump = it },
+                    label = { Text(stringResource(R.string.ssh_proxy_jump_optional)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = portForwardsText,
+                    onValueChange = { portForwardsText = it },
+                    label = { Text(stringResource(R.string.ssh_port_forwards_optional)) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

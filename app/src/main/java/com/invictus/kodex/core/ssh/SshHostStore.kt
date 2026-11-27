@@ -126,6 +126,8 @@ class SshHostStore(context: Context) {
                 privateKey = o.optString("privateKey"),
                 passphrase = o.optString("passphrase"),
                 defaultRemotePath = o.optString("defaultRemotePath"),
+                proxyJump = o.optString("proxyJump"),
+                portForwards = parseForwardsJson(o.optJSONArray("portForwards")),
                 rememberCredentials = o.optBoolean("rememberCredentials", true),
                 lastConnectedAt = o.optLong("lastConnectedAt", 0L),
             )
@@ -148,6 +150,8 @@ class SshHostStore(context: Context) {
                     put("privateKey", h.privateKey)
                     put("passphrase", h.passphrase)
                     put("defaultRemotePath", h.defaultRemotePath)
+                    put("proxyJump", h.proxyJump)
+                    put("portForwards", forwardsToJson(h.portForwards))
                     put("rememberCredentials", h.rememberCredentials)
                     put("lastConnectedAt", h.lastConnectedAt)
                 },
@@ -162,6 +166,41 @@ class SshHostStore(context: Context) {
         if (!tmp.renameTo(file)) {
             file.delete()
             tmp.renameTo(file)
+        }
+    }
+
+    private fun parseForwardsJson(arr: JSONArray?): List<SshForwardRule> {
+        if (arr == null || arr.length() == 0) return emptyList()
+        val out = ArrayList<SshForwardRule>(arr.length())
+        for (i in 0 until arr.length()) {
+            val f = arr.optJSONObject(i) ?: continue
+            val type = runCatching { SshForwardType.valueOf(f.optString("type")) }.getOrNull() ?: continue
+            val listenPort = f.optInt("listenPort", 0)
+            val targetHost = f.optString("targetHost")
+            val targetPort = f.optInt("targetPort", 0)
+            if (listenPort !in 1..65535 || targetHost.isBlank() || targetPort !in 1..65535) continue
+            out += SshForwardRule(
+                type = type,
+                bindAddress = f.optString("bindAddress", "127.0.0.1"),
+                listenPort = listenPort,
+                targetHost = targetHost,
+                targetPort = targetPort,
+            )
+        }
+        return out
+    }
+
+    private fun forwardsToJson(rules: List<SshForwardRule>): JSONArray = JSONArray().apply {
+        rules.forEach { r ->
+            put(
+                JSONObject().apply {
+                    put("type", r.type.name)
+                    put("bindAddress", r.bindAddress)
+                    put("listenPort", r.listenPort)
+                    put("targetHost", r.targetHost)
+                    put("targetPort", r.targetPort)
+                },
+            )
         }
     }
 

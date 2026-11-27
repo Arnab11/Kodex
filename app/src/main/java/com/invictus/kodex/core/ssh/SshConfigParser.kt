@@ -57,6 +57,20 @@ object SshConfigParser {
                         current?.identityPath = path
                     }
                 }
+                "proxyjump" -> {
+                    val jump = unquote(value)
+                    current?.proxyJump = if (jump.equals("none", ignoreCase = true)) "" else jump
+                }
+                "localforward" -> {
+                    parseConfigForward(SshForwardType.LOCAL, value)?.let { rule ->
+                        current?.forwards?.add(rule)
+                    }
+                }
+                "remoteforward" -> {
+                    parseConfigForward(SshForwardType.REMOTE, value)?.let { rule ->
+                        current?.forwards?.add(rule)
+                    }
+                }
             }
         }
 
@@ -72,9 +86,90 @@ object SshConfigParser {
                 username = b.user ?: "root",
                 authType = if (keyText.isNotEmpty()) SshAuthType.PRIVATE_KEY else SshAuthType.PASSWORD,
                 privateKey = keyText,
+                proxyJump = b.proxyJump.orEmpty(),
+                portForwards = b.forwards.toList(),
                 rememberCredentials = true,
             )
         }
+    }
+
+    /** Parses OpenSSH config `LocalForward [bind:]port host:hostport` / `RemoteForward ...`. */
+    fun parseConfigForward(type: SshForwardType, raw: String): SshForwardRule? {
+        val parts = raw.trim().split(Regex("\\s+"))
+        if (parts.size < 2) return null
+        val (bindAddr, listenPort) = parseHostPort(parts[0], defaultHost = "127.0.0.1") ?: return null
+        val (targetHost, targetPort) = parseHostPort(parts[1], defaultHost = null) ?: return null
+        return SshForwardRule(
+            type = type,
+            bindAddress = bindAddr,
+            listenPort = listenPort,
+            targetHost = targetHost,
+            targetPort = targetPort,
+        )
+    }
+
+    /**
+     * Parses UI / compact forward specs separated by commas or newlines:
+     * `L 8080:localhost:80, R 9000:127.0.0.1:3000` or `8080:localhost:80` (defaults to Local).
+     */
+    fun parseForwardList(raw: String): List<SshForwardRule> {
+        if (raw.isBlank()) return emptyList()
+        return raw.split(',', '\n').mapNotNull { entry ->
+            val trimmed = entry.trim()
+            if (trimmed.isEmpty()) return@mapNotNull null
+            val tokens = trimmed.split(Regex("\\s+"), limit = 2)
+            val (type, spec) = when (tokens[0].uppercase()) {
+                "L", "LOCAL" -> SshForwardType.LOCAL to tokens.getOrNull(1).orEmpty().trim()
+                "R", "REMOTE" -> SshForwardType.REMOTE to tokens.getOrNull(1).orEmpty().trim()
+                else -> SshForwardType.LOCAL to trimmed
+            }
+            if (spec.isEmpty()) return@mapNotNull null
+            // Support either `8080:host:80` / `127.0.0.1:8080:host:80` or `8080 host:80`
+            if (spec.contains(' ')) {
+                parseConfigForward(type, spec)
+            } else {
+                val colonParts = spec.split(':')
+                when (colonParts.size) {
+                    3 -> {
+                        val lp = colonParts[0].toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+                        val tp = colonParts[2].toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+                        val th = colonParts[1].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                        SshForwardRule(type, "127.0.0.1", lp, th, tp)
+                    }
+                    4 -> {
+                        val bind = colonParts[0].trim().ifEmpty { "127.0.0.1" }
+                        val lp = colonParts[1].toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+                        val th = colonParts[2].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                        val tp = colonParts[3].toIntOrNull()?.takeIf { it in 1..65535 } ?: return@mapNotNull null
+                        SshForwardRule(type, bind, lp, th, tp)
+                    }
+                    else -> null
+                }
+            }
+        }
+    }
+
+    private fun parseHostPort(token: String, defaultHost: String?): Pair<String, Int>? {
+        val clean = unquote(token.trim())
+        if (clean.isEmpty()) return null
+        if (clean.startsWith("[")) {
+            val close = clean.indexOf(']')
+            if (close < 0) return null
+            val host = clean.substring(1, close)
+            val rest = clean.substring(close + 1)
+            if (!rest.startsWith(":")) return null
+            val port = rest.substring(1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+            return host to port
+        }
+        val colon = clean.lastIndexOf(':')
+        if (colon < 0) {
+            if (defaultHost == null) return null
+            val port = clean.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+            return defaultHost to port
+        }
+        val host = clean.substring(0, colon).ifEmpty { defaultHost ?: return null }
+        val port = clean.substring(colon + 1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+        return host to port
     }
 
     private fun resolveKeyFile(rawPath: String, sshDir: File?): String? {
@@ -130,6 +225,8 @@ object SshConfigParser {
         var user: String? = null
         var port: Int? = null
         var identityPath: String? = null
+        var proxyJump: String? = null
+        val forwards = ArrayList<SshForwardRule>()
     }
 
     const val CONFIG_ID_PREFIX = "ssh-config:"

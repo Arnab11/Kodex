@@ -149,6 +149,13 @@ fun EditorScreen(
     val terminalEnabled = com.invictus.kodex.core.external.TermuxSetupPrefs.enabled(context).value
     // Switching the terminal off in Settings also closes an open split.
     androidx.compose.runtime.LaunchedEffect(terminalEnabled) { if (!terminalEnabled) showTerminalSplit = false }
+    LaunchedEffect(isTablet) {
+        if (isTablet) {
+            com.invictus.kodex.terminal.TerminalHub.splitEvents.collect {
+                showTerminalSplit = true
+            }
+        }
+    }
     var showFind by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
     // M17: AI panel in a bottom split; gate is null in the normal flavor.
